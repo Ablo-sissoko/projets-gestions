@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Gestion1",
-    "slug": "Gestion1",
+    "name": "DEEGIPOS",
+    "slug": "DEEGIPOS",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/10124x1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/img_background_app.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,13 +17,32 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/10124x1024.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.famakan.DEEGIPOS",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/10124x1024.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "171f023e-7c05-4935-9822-cc3c82b014b9"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'application a besoin d'accéder à vos photos."
+        }
+      ]
+    ],
+    "owner": "famayou"
   }
 }
