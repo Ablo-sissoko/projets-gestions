@@ -15,7 +15,12 @@ import {
 } from 'react-native'
 import Toast from 'react-native-toast-message'
 import Modal from 'react-native-modal'
-import { Modalize } from 'react-native-modalize'
+import {
+  BottomSheetBackdrop,
+  BottomSheetFlatList,
+  BottomSheetModal,
+  BottomSheetModalProvider,
+} from '@gorhom/bottom-sheet'
 import {
   Filter,
   Plus,
@@ -106,6 +111,7 @@ const Clients = () => {
   })
   const bottomSheetRef = useRef(null)
   const filterSheetRef = useRef(null)
+  const sheetSnapPoints = useMemo(() => ['75%'], [])
 
   useEffect(() => {
     refreshClients(1, false)
@@ -200,7 +206,7 @@ const Clients = () => {
   }
 
   const openFilters = () => {
-    filterSheetRef.current?.open()
+    filterSheetRef.current?.present()
   }
 
   const resetFilters = () => {
@@ -211,12 +217,12 @@ const Clients = () => {
       status: '',
     })
     setFilter('all')
-    filterSheetRef.current?.close()
+    filterSheetRef.current?.dismiss()
     refreshClients(1, false)
   }
 
   const applyFilters = () => {
-    filterSheetRef.current?.close()
+    filterSheetRef.current?.dismiss()
     refreshClients(1, false)
   }
 
@@ -304,7 +310,7 @@ const Clients = () => {
       status: '',
       user_id: '',
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.present()
   }
 
   const openEdit = (client) => {
@@ -319,7 +325,7 @@ const Clients = () => {
       status: String(client.statusValue ?? '1'),
       user_id: '',
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.present()
   }
 
   const saveClient = async () => {
@@ -348,7 +354,6 @@ const Clients = () => {
         telephone: form.telephone,
         adresse: form.adresse,
         user_id,
-        status: form.status || '1',
       }
 
       if (editMode === 'add') {
@@ -359,7 +364,10 @@ const Clients = () => {
           text2: 'Client créé avec succès',
         })
       } else {
-        await api.post(`/sellprox/clients/update/${form.id}`, payload)
+        await api.post(`/sellprox/clients/update/${form.id}`, {
+          ...payload,
+          status: form.status || '1',
+        })
         Toast.show({
           type: 'success',
           text1: 'Succès',
@@ -367,7 +375,7 @@ const Clients = () => {
         })
       }
 
-      bottomSheetRef.current?.close()
+      bottomSheetRef.current?.dismiss()
       refreshClients(1, false)
     } catch (error) {
       Toast.show({
@@ -380,7 +388,7 @@ const Clients = () => {
 
   const StatusBadge = ({ status }) => {
     const isActive = status === 'Activé'
-    return (
+  return (
       <View
         style={[
           styles.statusBadge,
@@ -471,10 +479,11 @@ const Clients = () => {
   }
 
   return (
+    <BottomSheetModalProvider>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 30}
     >
       <View style={styles.wrapper}>
         <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
@@ -568,9 +577,22 @@ const Clients = () => {
           onClose: () => setShowFilterStatusPicker(false),
         })}
         {/* Bottom Sheet Ajout/Modification */}
-        <Modalize ref={bottomSheetRef} adjustToContentHeight>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.sheetContent}>
+        <BottomSheetModal
+          ref={bottomSheetRef}
+          index={0}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={(props) => (
+            <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+          )}
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
               <Text style={styles.sheetTitle}>
                 {editMode === 'add' ? 'Ajouter un client' : 'Modifier le client'}
               </Text>
@@ -628,19 +650,21 @@ const Clients = () => {
                 placeholderTextColor={COLORS.muted}
               />
 
-              <TouchableOpacity
-                style={[styles.sheetInput, styles.selectButton]}
-                onPress={() => setShowStatusPicker(true)}
-              >
-                <Text style={form.status ? styles.selectText : styles.selectPlaceholder}>
-                  {getStatusLabel(form.status) || 'Sélectionner un statut'}
-                </Text>
-              </TouchableOpacity>
+              {editMode === 'edit' && (
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowStatusPicker(true)}
+                >
+                  <Text style={form.status ? styles.selectText : styles.selectPlaceholder}>
+                    {getStatusLabel(form.status) || 'Sélectionner un statut'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <View style={styles.sheetActions}>
                 <TouchableOpacity
                   style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={() => bottomSheetRef.current?.close()}
+                  onPress={() => bottomSheetRef.current?.dismiss()}
                 >
                   <Text style={styles.sheetButtonGhostText}>Annuler</Text>
                 </TouchableOpacity>
@@ -650,14 +674,28 @@ const Clients = () => {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
-        </Modalize>
+              </View>
+            }
+          />
+        </BottomSheetModal>
 
         {/* Bottom Sheet Filtres */}
-        <Modalize ref={filterSheetRef} adjustToContentHeight>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.sheetContent}>
+        <BottomSheetModal
+          ref={filterSheetRef}
+          index={0}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={(props) => (
+            <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
+          )}
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
               <Text style={styles.sheetTitle}>Filtrer les clients</Text>
 
               <TextInput
@@ -711,11 +749,13 @@ const Clients = () => {
                   <Text style={styles.sheetButtonText}>Appliquer</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
-        </Modalize>
+              </View>
+            }
+          />
+        </BottomSheetModal>
       </View>
     </KeyboardAvoidingView>
+    </BottomSheetModalProvider>
   )
 }
 
@@ -919,6 +959,7 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
   },
   sheetTitle: {
     fontSize: 18,
@@ -932,10 +973,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 12,
     color: COLORS.text,
     marginBottom: 12,
     fontSize: 15,
+    minHeight: 48,
   },
   selectButton: {
     justifyContent: 'center',

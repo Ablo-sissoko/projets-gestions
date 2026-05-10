@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "DEEGIPOS",
-    "slug": "DEEGIPOS",
+    "name": "Deegipos",
+    "slug": "deegipos",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/10124x1024.png",
+    "icon": "./assets/1024x1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -15,23 +15,24 @@
     "ios": {
       "supportsTablet": true
     },
+    "versionCode": 7,
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/10124x1024.png",
+        "foregroundImage": "./assets/1024x1024.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.famakan.DEEGIPOS",
+      "package": "com.famakan.deegipos",
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
-      "favicon": "./assets/10124x1024.png"
+      "favicon": "./assets/1024x1024.png"
     },
     "extra": {
       "eas": {
-        "projectId": "171f023e-7c05-4935-9822-cc3c82b014b9"
+        "projectId": "60c17ea9-7134-4cc6-8bfb-aa13e164f523"
       }
     },
     "plugins": [
@@ -40,6 +41,29 @@
         "expo-image-picker",
         {
           "photosPermission": "L'application a besoin d'accéder à vos photos."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "L'application a besoin d'accéder à la caméra pour scanner les codes-barres."
+        }
+      ],
+      [
+        "react-native-share",
+        {
+          "ios": [
+            "fb",
+            "instagram",
+            "twitter",
+            "tiktoksharesdk"
+          ],
+          "android": [
+            "com.facebook.katana",
+            "com.instagram.android",
+            "com.twitter.android",
+            "com.zhiliaoapp.musically"
+          ]
         }
       ]
     ],

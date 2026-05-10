@@ -1,10 +1,9 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Image,
@@ -12,8 +11,12 @@ import {
   RefreshControl,
   Linking,
   Dimensions,
+  Modal,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
-import Modal from 'react-native-modal'
+import BottomSheet, { BottomSheetFlatList, BottomSheetView } from '@gorhom/bottom-sheet'
 import { WebView } from 'react-native-webview'
 import { QrCode, Search, ShoppingCart, Printer } from 'lucide-react-native'
 import Header from '../componants/Header'
@@ -29,6 +32,11 @@ const RECEIPT_BASE_URL = 'https://deegipay.com/backend_pos/pdf/recu_paiement.php
 
 const recu_impression = 'https://deegipay.com/backend_pos/pdf/recu_impression.php?id='
 
+/** POST relatif à api baseURL — URL complète : https://deegipay.com/backend_pos/api/v1/sellprox/clients/create */
+const SELLPROX_CLIENTS_CREATE = '/sellprox/clients/create'
+
+/** Hauteur max de la carte client (centrée à l’écran) */
+const CLIENT_MODAL_SHEET_HEIGHT = Math.round(Dimensions.get('window').height * 0.78)
 
 
 
@@ -49,7 +57,7 @@ const SalesHeader = React.memo(function SalesHeader({
         <View style={styles.searchLoading}>
           <ActivityIndicator size="small" color={COLORS.primary} />
           <Text style={styles.searchLoadingText}>Chargement...</Text>
-        </View>
+    </View>
       ) : null}
 
       <View style={{ flexDirection: 'row', gap: 15 }}>
@@ -110,6 +118,66 @@ const SalesHeader = React.memo(function SalesHeader({
   )
 })
 
+const ProductCard = React.memo(function ProductCard({ item, inCart, onAdd, onRemove }) {
+  return (
+    <View style={styles.productItem}>
+      <View style={styles.productCard}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => onAdd(item)}
+        >
+          <Image
+            source={{
+              uri: item.image || 'https://via.placeholder.com/400',
+            }}
+            style={styles.image}
+            onError={() => {}}
+          />
+          <Text
+            style={styles.productName}
+            numberOfLines={2}
+          >
+            {item.name}
+          </Text>
+          <Text style={styles.price}>
+            {Number(item.price || 0).toLocaleString()} FCFA
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.cartActions}>
+          <TouchableOpacity
+            style={styles.cartActionButton}
+            onPress={() => onAdd(item)}
+          >
+            <Text style={styles.cartActionText}>
+              Ajouter
+            </Text>
+          </TouchableOpacity>
+
+          {inCart && (
+            <TouchableOpacity
+              style={[
+                styles.cartActionButton,
+                styles.cartActionDanger,
+              ]}
+              onPress={() => onRemove(item)}
+            >
+              <Text
+                style={[
+                  styles.cartActionText,
+                  styles.cartActionTextDanger,
+                ]}
+              >
+                Retirer ({inCart.qty})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  )
+})
+
 export default function SalesScreen() {
   const navigation = useNavigation()
   const route = useRoute()
@@ -134,13 +202,12 @@ export default function SalesScreen() {
   const [selectedClient, setSelectedClient] = useState(null)
   const [clients, setClients] = useState([])
   const [clientsLoading, setClientsLoading] = useState(false)
-  // 🔥 MODAL pour le produit scanné
-  const [scannedProductModal, setScannedProductModal] = useState(false)
-  const [currentScannedProduct, setCurrentScannedProduct] = useState(null)
+  const [clientListSearch, setClientListSearch] = useState('')
   // 🔥 MODAL pour le scanner intégré
   const [cameraPermission, requestPermission] = useCameraPermissions()
   const [scannerVisible, setScannerVisible] = useState(false)
-  const [scanned, setScanned] = useState(false)
+  const [scannedProductsList, setScannedProductsList] = useState([])
+  const [isScanning, setIsScanning] = useState(true)
 
   const [clientForm, setClientForm] = useState({
     nom_entreprise: "",
@@ -151,12 +218,22 @@ export default function SalesScreen() {
   })
   const [receiptModalVisible, setReceiptModalVisible] = useState(false)
   const [lastSaleId, setLastSaleId] = useState(null)
+  const [fastClientName, setFastClientName] = useState('')
+  const [fastPhone, setFastPhone] = useState('')
+  const [fastCreating, setFastCreating] = useState(false)
+
+  const scannerSheetRef = useRef(null)
+  const receiptSheetRef = useRef(null)
+  const fastSheetRef = useRef(null)
+  const scannerSnapPoints = useMemo(() => ['85%'], [])
+  const receiptSnapPoints = useMemo(() => ['90%'], [])
+  const fastSnapPoints = useMemo(() => ['50%'], [])
 
 
 
   useEffect(() => {
     if (route.params?.barcode) {
-      searchProductByBarcode(route.params.barcode)
+      addScannedProductByBarcode(route.params.barcode)
       navigation.setParams({ barcode: undefined })
     }
   }, [route.params?.barcode])
@@ -190,9 +267,28 @@ export default function SalesScreen() {
   useEffect(() => {
     if (clientModalVisible) {
       setSelectedClient(null)
+      setClientListSearch('')
       fetchClients()
     }
   }, [clientModalVisible, fetchClients])
+
+  const filteredClients = useMemo(() => {
+    const q = clientListSearch.trim().toLowerCase()
+    if (!q) return clients
+    const qq = q.replace(/\s/g, '')
+    return clients.filter((c) => {
+      const name = String(c.nom_customer || '').toLowerCase()
+      const phone = String(c.telephone || '').toLowerCase().replace(/\s/g, '')
+      const email = String(c.email || '').toLowerCase()
+      const ent = String(c.nom_entreprise || '').toLowerCase()
+      return (
+        name.includes(q) ||
+        phone.includes(qq) ||
+        email.includes(q) ||
+        ent.includes(q)
+      )
+    })
+  }, [clients, clientListSearch])
 
   /* 🛒 CART LOGIC */
   const addToCart = (product) => {
@@ -318,8 +414,7 @@ export default function SalesScreen() {
     }
   }
 
-  // 🔥 Fonction de scan avec modal
-  const searchProductByBarcode = async (barcode) => {
+  const addScannedProductByBarcode = async (barcode) => {
     const entreprise_id = user?.entreprise_id
     if (!entreprise_id) return
     try {
@@ -353,12 +448,27 @@ export default function SalesScreen() {
         category_id: String(item.category_id),
         status: item.status,
         image: item.img_url,
+        barcode,
+        scannedAt: new Date().toISOString(),
       }
 
-      // ✅ Ouvrir le modal avec le produit scanné
-      setCurrentScannedProduct(formatted)
-      setScannedProductModal(true)
+      setScannedProductsList((prev) => {
+        const existing = prev.find((p) => p.id === formatted.id)
+        if (existing) {
+          return prev.map((p) =>
+            p.id === formatted.id
+              ? { ...p, qty: (p.qty || 1) + 1 }
+              : p
+          )
+        }
+        return [...prev, { ...formatted, qty: 1 }]
+      })
 
+      Toast.show({
+        type: 'success',
+        text1: 'Produit scanné',
+        text2: `${formatted.name} ajouté à la liste`,
+      })
     } catch (error) {
       Toast.show({
         type: 'error',
@@ -370,15 +480,55 @@ export default function SalesScreen() {
 
   // 🔥 Gestionnaire de scan depuis le modal caméra
   const handleBarCodeScanned = async ({ data }) => {
-    if (scanned) return
+    if (!isScanning) return
+    setIsScanning(false)
 
-    setScanned(true)
-    await searchProductByBarcode(data)
+    const entreprise_id = user?.entreprise_id
+    if (!entreprise_id) {
+      setIsScanning(true)
+      return
+    }
 
-    setTimeout(() => {
-      setScannerVisible(false)
-      setScanned(false)
-    }, 500)
+    try {
+      await addScannedProductByBarcode(data)
+    } finally {
+      setTimeout(() => {
+        setIsScanning(true)
+      }, 1500)
+    }
+  }
+
+  const addScannedToCart = (scannedProduct) => {
+    addToCart(scannedProduct)
+    setScannedProductsList((prev) => prev.filter((p) => p.id !== scannedProduct.id))
+    Toast.show({
+      type: 'success',
+      text1: 'Ajouté au panier',
+      text2: `${scannedProduct.name} a été ajouté au panier`,
+    })
+  }
+
+  const addAllScannedToCart = () => {
+    scannedProductsList.forEach((product) => {
+      for (let i = 0; i < (product.qty || 1); i += 1) {
+        addToCart(product)
+      }
+    })
+    const totalAdded = scannedProductsList.reduce(
+      (sum, p) => sum + (p.qty || 1),
+      0
+    )
+    setScannedProductsList([])
+    setScannerVisible(false)
+    Toast.show({
+      type: 'success',
+      text1: 'Succès',
+      text2: `${totalAdded} produit(s) ajouté(s) au panier`,
+    })
+  }
+
+  const removeScannedProduct = (productId) => {
+    setScannedProductsList((prev) => prev.filter((p) => p.id !== productId))
   }
 
   const refreshAll = useCallback(async () => {
@@ -418,6 +568,54 @@ export default function SalesScreen() {
     return map
   }, [cart])
 
+  const renderItem = useCallback(({ item }) => {
+    const inCart = cartMap[item.id]
+    return (
+      <ProductCard
+        item={item}
+        inCart={inCart}
+        onAdd={addToCart}
+        onRemove={removeFromCart}
+      />
+    )
+  }, [cartMap, addToCart, removeFromCart])
+
+  useEffect(() => {
+    if (scannerVisible) {
+      scannerSheetRef.current?.expand()
+    } else {
+      scannerSheetRef.current?.close()
+    }
+  }, [scannerVisible])
+
+  useEffect(() => {
+    if (receiptModalVisible) {
+      receiptSheetRef.current?.expand()
+    } else {
+      receiptSheetRef.current?.close()
+    }
+  }, [receiptModalVisible])
+
+  const handleScannerSheetChange = useCallback((index) => {
+    if (index === -1) {
+      setScannerVisible(false)
+      setScannedProductsList([])
+      setIsScanning(true)
+    }
+  }, [])
+
+  const closeClientModal = useCallback(() => {
+    setClientModalVisible(false)
+    setShowClientForm(false)
+    setClientListSearch('')
+  }, [])
+
+  const handleReceiptSheetChange = useCallback((index) => {
+    if (index === -1) {
+      setReceiptModalVisible(false)
+    }
+  }, [])
+
   const handlePay = () => {
     if (!cart.length){
       Toast.show({ type: 'error', text1: 'Erreur', text2: 'Ajoutez au moins un produit au panier' })
@@ -426,34 +624,166 @@ export default function SalesScreen() {
     setClientModalVisible(true)
   }
 
-  const finalizeSale = async () => {
-    const hasClient = selectedClient || (clientForm.nom_customer?.trim())
-    if (!hasClient) {
-      Toast.show({ type: 'error', text1: 'Client requis', text2: 'Choisissez un client ou créez-en un.' })
+  const handleFastPay = () => {
+    if (!cart.length) {
+      Toast.show({
+        type: 'error',
+        text1: 'Panier vide',
+      })
       return
+    }
+    fastSheetRef.current?.expand()
+  }
+
+  const submitFastSale = async () => {
+    try {
+      setFastCreating(true)
+      const entreprise_id = user?.entreprise_id
+      if (!entreprise_id || !user?.id) {
+        Toast.show({
+          type: 'error',
+          text1: 'Erreur',
+          text2: 'Session expirée. Veuillez vous reconnecter.',
+        })
+        return
+      }
+
+      const now = new Date()
+      const date = now.toISOString().slice(0, 19).replace('T', ' ')
+
+      const payload = {
+        entreprise_id,
+        client_name: fastClientName || 'Client rapide',
+        phone: fastPhone || '',
+        proforma_id: "1",
+        employee_id: user?.id,
+        employee_name: `${user?.prenom || ''} ${user?.nom || ''}`.trim(),
+        date,
+        items: cart.map(item => ({
+          id: Number(item.id),
+          nom: item.name,
+          prix: Number(item.price),
+          quantity: item.qty
+        }))
+      }
+
+      const response = await api.post('/sellprox/vente/encaissement/create', payload)
+      const ok = response.data?.status === 1 || response.status === 200
+
+      if (ok) {
+        Toast.show({
+          type: 'success',
+          text1: 'Vente rapide effectuée 🚀',
+        })
+        setCart([])
+        setFastClientName('')
+        setFastPhone('')
+        fastSheetRef.current?.close()
+      } else {
+        throw new Error(response.data?.msg || 'Erreur lors de la vente rapide')
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: error.message,
+      })
+    } finally {
+      setFastCreating(false)
+    }
+  }
+
+  const finalizeSale = async () => {
+    if (!selectedClient && !showClientForm) {
+      Toast.show({
+        type: 'error',
+        text1: 'Client requis',
+        text2: 'Sélectionnez un client dans la liste ou utilisez l’onglet Nouveau.',
+      })
+      return
+    }
+    if (showClientForm && !selectedClient) {
+      if (!clientForm.nom_customer?.trim() || !clientForm.telephone?.trim()) {
+        Toast.show({
+          type: 'error',
+          text1: 'Client incomplet',
+          text2: 'Indiquez au minimum le nom et le téléphone.',
+        })
+        return
+      }
     }
 
     setCreating(true)
     try {
       const entreprise_id = user?.entreprise_id
-      if (!user?.id || !entreprise_id) {
+      const user_id = user?.id
+      if (!user_id || !entreprise_id) {
         setCreating(false)
         return
       }
+
+      let saleClient = selectedClient
+      if (showClientForm && !selectedClient) {
+        try {
+          const createPayload = {
+            entreprise_id,
+            nom_entreprise: clientForm.nom_entreprise?.trim() || '',
+            nom_customer: clientForm.nom_customer.trim(),
+            email: clientForm.email?.trim() || '',
+            telephone: clientForm.telephone.trim(),
+            adresse: clientForm.adresse?.trim() || '',
+            user_id,
+           
+          }
+          const createRes = await api.post(SELLPROX_CLIENTS_CREATE, createPayload)
+
+          console.log(createRes.data)
+          
+          const createOk =
+            createRes.data?.status === 1 ||
+            createRes.data?.status === 200 ||
+            createRes.data?.status === true ||
+            createRes.status === 200
+          if (!createOk) {
+            Toast.show({
+              type: 'error',
+              text1: 'Création client',
+              text2: createRes.data?.msg || createRes.data?.message || 'Impossible d’enregistrer le client',
+            })
+            return
+          }
+          const raw = createRes.data?.resultat ?? createRes.data?.client ?? createRes.data?.data
+          saleClient = {
+            id: raw?.id ?? raw?.client_id,
+            nom_customer: clientForm.nom_customer.trim(),
+            email: clientForm.email?.trim() || '',
+            telephone: clientForm.telephone.trim(),
+          }
+          fetchClients()
+        } catch (err) {
+          Toast.show({
+            type: 'error',
+            text1: 'Création client',
+            text2: err.response?.data?.message || err.response?.data?.msg || err.message || 'Erreur serveur',
+          })
+          return
+        }
+      }
+
       const employeeName = `${user?.prenom || ''} ${user?.nom || ''}`.trim()
 
       const now = new Date()
       const date = now.toISOString().slice(0, 19).replace('T', ' ')
 
       const payload = {
-        client_name: selectedClient?.nom_customer ?? clientForm.nom_customer ?? '',
-        email: selectedClient?.email ?? clientForm.email ?? '',
-        phone: selectedClient?.telephone ?? clientForm.telephone ?? '',
+        client_name: saleClient?.nom_customer ?? clientForm.nom_customer ?? '',
+        email: saleClient?.email ?? clientForm.email ?? '',
+        phone: saleClient?.telephone ?? clientForm.telephone ?? '',
         proforma_id: '1',
-        user_id: user?.id,
-        employee_id: user?.id,
+        user_id,
+        employee_id: user_id,
         employee_name: employeeName || '',
-        entreprise_id: entreprise_id,
+        entreprise_id,
         date,
         items: cart.map((item) => ({
           id: Number(item.id),
@@ -540,67 +870,7 @@ export default function SalesScreen() {
         maxToRenderPerBatch={10}
         windowSize={5}
         updateCellsBatchingPeriod={50}
-        renderItem={({ item }) => {
-          const inCart = cartMap[item.id]
-
-          return (
-            <View style={styles.productItem}>
-              <View style={styles.productCard}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => addToCart(item)}
-                >
-                  <Image
-                    source={{
-                      uri: item.image || 'https://via.placeholder.com/400',
-                    }}
-                    style={styles.image}
-                    onError={() => {}}
-                  />
-                  <Text
-                    style={styles.productName}
-                    numberOfLines={2}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text style={styles.price}>
-                    {Number(item.price || 0).toLocaleString()} FCFA
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={styles.cartActions}>
-                  <TouchableOpacity
-                    style={styles.cartActionButton}
-                    onPress={() => addToCart(item)}
-                  >
-                    <Text style={styles.cartActionText}>
-                      Ajouter
-                    </Text>
-                  </TouchableOpacity>
-
-                  {inCart && (
-                    <TouchableOpacity
-                      style={[
-                        styles.cartActionButton,
-                        styles.cartActionDanger,
-                      ]}
-                      onPress={() => removeFromCart(item)}
-                    >
-                      <Text
-                        style={[
-                          styles.cartActionText,
-                          styles.cartActionTextDanger,
-                        ]}
-                      >
-                        Retirer ({inCart.qty})
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            </View>
-          )
-        }}
+        renderItem={renderItem}
       />
 
       {/* 🛒 CART FOOTER */}
@@ -614,168 +884,303 @@ export default function SalesScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.payButton}
-          onPress={handlePay}
-          disabled={creating || !cart.length}
-        >
-          <Text style={styles.payText}>PAYER</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 🔥 MODAL SCANNER CAMERA INTÉGRÉ */}
-      <Modal
-        isVisible={scannerVisible}
-        style={{ margin: 0 }}
-        onBackdropPress={() => setScannerVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: COLORS.black }}>
-          {cameraPermission?.granted ? (
-            <CameraView
-              style={{ flex: 1 }}
-              facing="back"
-              barcodeScannerSettings={{
-                barcodeTypes: ["ean13", "ean8", "code128", "qr"],
-              }}
-              onBarcodeScanned={
-                scanned ? undefined : handleBarCodeScanned
-              }
-            />
-          ) : (
-            <View style={styles.center}>
-              <Text style={{ color: COLORS.white }}>
-                Permission caméra requise
-              </Text>
-            </View>
-          )}
-
-          {/* Bouton fermer */}
+        <View style={styles.cartActionsRow}>
           <TouchableOpacity
-            style={{
-              position: "absolute",
-              bottom: 40,
-              alignSelf: "center",
-              backgroundColor: COLORS.primary,
-              padding: 14,
-              borderRadius: 16,
-            }}
-            onPress={() => setScannerVisible(false)}
+            style={styles.fastPayButton}
+            onPress={handleFastPay}
           >
-            <Text style={{ color: COLORS.white, fontWeight: "700" }}>
-              Fermer
-            </Text>
+            <Text style={styles.fastPayTextSmall}>⚡ Vente rapide</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.payButton}
+            onPress={handlePay}
+            disabled={creating || !cart.length}
+          >
+            <Text style={styles.payText}>PAYER</Text>
           </TouchableOpacity>
         </View>
-      </Modal>
+      </View>
 
-      {/* 🔥 MODAL PRODUIT SCANNÉ */}
-      <Modal
-        isVisible={scannedProductModal}
-        onBackdropPress={() => setScannedProductModal(false)}
-        onBackButtonPress={() => setScannedProductModal(false)}
-        backdropOpacity={0.7}
+      {/* 🔥 BOTTOM SHEET SCANNER */}
+      <BottomSheet
+        ref={scannerSheetRef}
+        index={-1}
+        snapPoints={scannerSnapPoints}
+        enablePanDownToClose
+        onChange={handleScannerSheetChange}
       >
-        <View style={styles.modalCardPro}>
-          {currentScannedProduct && (
-            <>
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: currentScannedProduct.image }}
-                  style={styles.modalImagePro}
-                />
-                <View style={styles.priceBadge}>
-                  <Text style={styles.priceBadgeText}>
-                    {currentScannedProduct.price.toLocaleString()} FCFA
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.modalTitlePro}>{currentScannedProduct.name}</Text>
-
-              <View style={styles.qtyRow}>
-                <TouchableOpacity
-                  style={styles.qtyBtnPro}
-                  onPress={() => removeFromCart(currentScannedProduct)}
-                >
-                  <Text style={styles.qtyTextPro}>−</Text>
-                </TouchableOpacity>
-
-                <View style={styles.qtyDisplay}>
-                  <Text style={styles.qtyDisplayText}>
-                    {cart.find((p) => p.id === currentScannedProduct.id)?.qty || 0}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.qtyBtnPro}
-                  onPress={() => addToCart(currentScannedProduct)}
-                >
-                  <Text style={styles.qtyTextPro}>+</Text>
+        <BottomSheetView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+          <View style={styles.cameraContainer}>
+            {scannerVisible && cameraPermission?.granted ? (
+              <CameraView
+                style={styles.cameraView}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ["ean13", "ean8", "code128", "qr"],
+                }}
+                onBarcodeScanned={isScanning ? handleBarCodeScanned : undefined}
+              />
+            ) : (
+              <View style={styles.center}>
+                <Text style={styles.cameraPermissionText}>
+                  Permission caméra requise
+                </Text>
+                <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+                  <Text style={styles.permissionButtonText}>Autoriser</Text>
                 </TouchableOpacity>
               </View>
+            )}
 
-              <TouchableOpacity
-                style={styles.addBtnPro}
-                onPress={() => setScannedProductModal(false)}
-              >
-                <Text style={styles.addTextPro}>Ajouter au panier</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </Modal>
-
-      {/* 🔥 MODAL CLIENT UNIQUE — onglets Clients / Nouveau */}
-      <Modal
-        isVisible={clientModalVisible}
-        onBackdropPress={() => {
-          setClientModalVisible(false)
-          setShowClientForm(false)
-        }}
-        onBackButtonPress={() => {
-          setClientModalVisible(false)
-          setShowClientForm(false)
-        }}
-        backdropOpacity={0.7}
-      >
-        <View style={styles.clientModal}>
-          <Text style={styles.modalTitle}>Client</Text>
-
-          <View style={styles.clientTabs}>
-            <TouchableOpacity
-              style={[styles.clientTab, !showClientForm && styles.clientTabActive]}
-              onPress={() => setShowClientForm(false)}
-            >
-              <Text style={[styles.clientTabText, !showClientForm && styles.clientTabTextActive]}>
-                Clients
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.clientTab, showClientForm && styles.clientTabActive]}
-              onPress={() => {
-                setSelectedClient(null)
-                setShowClientForm(true)
-              }}
-            >
-              <Text style={[styles.clientTabText, showClientForm && styles.clientTabTextActive]}>
-                Nouveau
-              </Text>
-            </TouchableOpacity>
+            {isScanning && scannerVisible && (
+              <View style={styles.scanOverlay}>
+                <View style={styles.scanFrame} />
+                <Text style={styles.scanText}>Scannez un code-barres</Text>
+              </View>
+            )}
           </View>
 
-          {!showClientForm ? (
-            <>
-              {clientsLoading ? (
-                <ActivityIndicator
-                  size="large"
-                  color={COLORS.primary}
-                  style={{ marginVertical: 24 }}
-                />
-              ) : (
+          <View style={styles.scannedListContainer}>
+            <View style={styles.scannedListHeader}>
+              <Text style={styles.scannedListTitle}>
+                Produits scannés ({scannedProductsList.reduce((sum, p) => sum + (p.qty || 1), 0)})
+              </Text>
+              {scannedProductsList.length > 0 && (
+                <TouchableOpacity onPress={() => setScannedProductsList([])}>
+                  <Text style={styles.clearAllText}>Tout effacer</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {scannedProductsList.length === 0 ? (
+              <View style={styles.emptyScannedList}>
+                <QrCode size={48} color={COLORS.muted} />
+                <Text style={styles.emptyScannedText}>
+                  Scannez des produits pour les voir apparaître ici
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={scannedProductsList}
+                keyExtractor={(item) => `${item.id}-${item.scannedAt}`}
+                style={styles.scannedList}
+                renderItem={({ item }) => (
+                  <View style={styles.scannedItem}>
+                    <Image
+                      source={{ uri: item.image || 'https://via.placeholder.com/50' }}
+                      style={styles.scannedItemImage}
+                    />
+                    <View style={styles.scannedItemInfo}>
+                      <Text style={styles.scannedItemName} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.scannedItemPrice}>
+                        {item.price.toLocaleString()} FCFA
+                      </Text>
+                      <View style={styles.scannedItemQty}>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => {
+                            setScannedProductsList((prev) =>
+                              prev
+                                .map((p) =>
+                                  p.id === item.id && (p.qty || 1) > 1
+                                    ? { ...p, qty: (p.qty || 1) - 1 }
+                                    : p
+                                )
+                                .filter((p) => (p.qty || 1) > 0)
+                            )
+                          }}
+                        >
+                          <Text style={styles.qtyBtnText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.qtyValue}>{item.qty || 1}</Text>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => {
+                            setScannedProductsList((prev) =>
+                              prev.map((p) =>
+                                p.id === item.id
+                                  ? { ...p, qty: (p.qty || 1) + 1 }
+                                  : p
+                              )
+                            )
+                          }}
+                        >
+                          <Text style={styles.qtyBtnText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.scannedItemActions}>
+                      <TouchableOpacity
+                        style={styles.addSingleButton}
+                        onPress={() => addScannedToCart(item)}
+                      >
+                        <Text style={styles.addSingleButtonText}>Ajouter</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => removeScannedProduct(item.id)}
+                      >
+                        <Text style={styles.removeButtonText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              />
+            )}
+
+            {scannedProductsList.length > 0 && (
+              <View style={styles.scannerActions}>
+                <TouchableOpacity
+                  style={[styles.scannerActionButton, styles.addAllButton]}
+                  onPress={addAllScannedToCart}
+                >
+                  <ShoppingCart size={20} color={COLORS.white} />
+                  <Text style={styles.scannerActionText}>
+                    Ajouter tout ({scannedProductsList.reduce((sum, p) => sum + (p.qty || 1), 0)})
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.scannerActionButton, styles.continueScanButton]}
+                  onPress={() => {
+                    Toast.show({
+                      type: 'info',
+                      text1: 'Scan continu',
+                      text2: 'Continuez à scanner des produits',
+                    })
+                  }}
+                >
+                  <QrCode size={20} color={COLORS.primary} />
+                  <Text style={[styles.scannerActionText, { color: COLORS.primary }]}>
+                    Scanner plus
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.closeScannerButton}
+              onPress={() => setScannerVisible(false)}
+            >
+              <Text style={styles.closeScannerText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetView>
+      </BottomSheet>
+
+      {/* Modal choix client — liste scrollable, bouton finaliser fixe en bas */}
+      <Modal
+        visible={clientModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeClientModal}
+      >
+        <View style={styles.clientRnModalOuter}>
+          <Pressable style={styles.clientRnModalBackdrop} onPress={closeClientModal} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={[
+              styles.clientRnModalSheetWrap,
+              showClientForm ? styles.clientRnModalSheetWrapCompact : styles.clientRnModalSheetWrapExpanded,
+            ]}
+          >
+            <View
+              style={[
+                styles.clientRnModalInner,
+                !showClientForm && styles.clientRnModalInnerExpanded,
+              ]}
+            >
+              <View style={styles.clientModalHeader}>
+                <View style={styles.clientModalTitleRow}>
+                  <Text style={styles.modalTitle}>Client</Text>
+                  <TouchableOpacity onPress={closeClientModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                    <Text style={styles.clientModalClose}>Fermer</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.clientTabs}>
+                  <TouchableOpacity
+                    style={[styles.clientTab, !showClientForm && styles.clientTabActive]}
+                    onPress={() => setShowClientForm(false)}
+                  >
+                    <Text style={[styles.clientTabText, !showClientForm && styles.clientTabTextActive]}>
+                      Clients
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.clientTab, showClientForm && styles.clientTabActive]}
+                    onPress={() => {
+                      setSelectedClient(null)
+                      setClientListSearch('')
+                      setShowClientForm(true)
+                    }}
+                  >
+                    <Text style={[styles.clientTabText, showClientForm && styles.clientTabTextActive]}>
+                      Nouveau
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {!showClientForm ? (
+                  <View style={styles.clientSearchRow}>
+                    <Search size={18} color={COLORS.muted} />
+                    <TextInput
+                      placeholder="Rechercher un client (nom, tél., e-mail)…"
+                      placeholderTextColor={COLORS.muted}
+                      style={styles.clientSearchInput}
+                      value={clientListSearch}
+                      onChangeText={setClientListSearch}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      clearButtonMode="while-editing"
+                    />
+                  </View>
+                ) : null}
+
+                {!showClientForm && clientsLoading ? (
+                  <ActivityIndicator
+                    size="large"
+                    color={COLORS.primary}
+                    style={{ marginVertical: 24 }}
+                  />
+                ) : null}
+
+                {showClientForm ? (
+                  <View style={{ width: '100%' }}>
+                    <TextInput
+                      placeholder="Nom client *"
+                      placeholderTextColor={COLORS.muted}
+                      style={styles.inputPro}
+                      value={clientForm.nom_customer}
+                      onChangeText={(t) => setClientForm({ ...clientForm, nom_customer: t })}
+                    />
+                    <TextInput
+                      placeholder="Téléphone *"
+                      placeholderTextColor={COLORS.muted}
+                      style={styles.inputPro}
+                      value={clientForm.telephone}
+                      onChangeText={(t) => setClientForm({ ...clientForm, telephone: t })}
+                      keyboardType="phone-pad"
+                    />
+                    <TextInput
+                      placeholder="Email (facultatif)"
+                      placeholderTextColor={COLORS.muted}
+                      style={styles.inputPro}
+                      value={clientForm.email}
+                      onChangeText={(t) => setClientForm({ ...clientForm, email: t })}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              {!showClientForm ? (
                 <FlatList
-                  data={clients}
-                  keyExtractor={(item) => String(item.id)}
-                  style={{ maxHeight: 300, width: '100%' }}
+                  data={filteredClients}
+                  keyExtractor={(item, index) => String(item?.id ?? index)}
+                  keyboardShouldPersistTaps="handled"
+                  style={styles.clientSheetList}
                   renderItem={({ item }) => (
                     <TouchableOpacity
                       style={[
@@ -789,99 +1194,154 @@ export default function SalesScreen() {
                     </TouchableOpacity>
                   )}
                   ListEmptyComponent={
-                    <Text style={{ color: COLORS.muted, paddingVertical: 16 }}>Aucun client</Text>
+                    !clientsLoading ? (
+                      <Text style={{ color: COLORS.muted, paddingVertical: 16, textAlign: 'center' }}>
+                        {clients.length === 0
+                          ? 'Aucun client'
+                          : clientListSearch.trim()
+                            ? 'Aucun client ne correspond à votre recherche'
+                            : 'Aucun client'}
+                      </Text>
+                    ) : null
                   }
                 />
-              )}
-            </>
-          ) : (
-            <ScrollView
-              style={{ width: '100%' }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+              ) : null}
+
+              <View
+                style={[
+                  styles.clientSheetFooter,
+                  showClientForm && styles.clientSheetFooterCompact,
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.payButtonModalFooter}
+                  onPress={finalizeSale}
+                  disabled={
+                    creating ||
+                    !(
+                      selectedClient ||
+                      (showClientForm &&
+                        clientForm.nom_customer?.trim() &&
+                        clientForm.telephone?.trim())
+                    )
+                  }
+                >
+                  {creating ? (
+                    <ActivityIndicator color={COLORS.white} />
+                  ) : (
+                    <Text style={styles.payButtonText}>FINALISER LE PAIEMENT</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* 🔥 BOTTOM SHEET REÇU DE VENTE */}
+      <BottomSheet
+        ref={receiptSheetRef}
+        index={-1}
+        snapPoints={receiptSnapPoints}
+        enablePanDownToClose
+        onChange={handleReceiptSheetChange}
+      >
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
+          renderItem={null}
+          ListHeaderComponent={
+            <View style={styles.receiptModal}>
+              <Text style={styles.receiptModalTitle}>Reçu de vente</Text>
+              {lastSaleId ? (
+                <>
+                  <View style={styles.receiptWebViewWrap}>
+                    <WebView
+                      source={{ uri: `${RECEIPT_BASE_URL}${lastSaleId}` }}
+                      style={styles.receiptWebView}
+                      scrollEnabled
+                      startInLoadingState
+                      renderLoading={() => (
+                        <View style={styles.receiptLoading}>
+                          <ActivityIndicator size="large" color={COLORS.primary} />
+                        </View>
+                      )}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.receiptPrintButton}
+                    onPress={() => Linking.openURL(`${recu_impression}${lastSaleId}`)}
+                  >
+                    <Printer size={20} color={COLORS.white} />
+                    <Text style={styles.receiptPrintText}>Imprimer</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.receiptPrintButton, { backgroundColor: COLORS.border, marginTop: 8 }]}
+                onPress={() => setReceiptModalVisible(false)}
+              >
+                <Text style={[styles.receiptPrintText, { color: COLORS.text }]}>Fermer</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      </BottomSheet>
+
+      {/* ⚡ BOTTOM SHEET VENTE RAPIDE */}
+      <BottomSheet
+        ref={fastSheetRef}
+        index={-1}
+        snapPoints={fastSnapPoints}
+        enablePanDownToClose
+      >
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
+          renderItem={null}
+          ListHeaderComponent={
+            <View style={styles.fastContainer}>
+              <Text style={styles.fastTitle}>Vente rapide</Text>
+
               <TextInput
-                placeholder="Nom client *"
+                placeholder="Nom client (optionnel)"
+                value={fastClientName}
+                onChangeText={setFastClientName}
+                style={styles.fastInput}
                 placeholderTextColor={COLORS.muted}
-                style={styles.inputPro}
-                value={clientForm.nom_customer}
-                onChangeText={(t) => setClientForm({ ...clientForm, nom_customer: t })}
               />
+
               <TextInput
                 placeholder="Téléphone"
+                value={fastPhone}
+                onChangeText={setFastPhone}
+                style={styles.fastInput}
                 placeholderTextColor={COLORS.muted}
-                style={styles.inputPro}
-                value={clientForm.telephone}
-                onChangeText={(t) => setClientForm({ ...clientForm, telephone: t })}
                 keyboardType="phone-pad"
               />
-              <TextInput
-                placeholder="Email"
-                placeholderTextColor={COLORS.muted}
-                style={styles.inputPro}
-                value={clientForm.email}
-                onChangeText={(t) => setClientForm({ ...clientForm, email: t })}
-                keyboardType="email-address"
-              />
-            </ScrollView>
-          )}
 
-          <TouchableOpacity
-            style={styles.payButtonModal}
-            onPress={finalizeSale}
-            disabled={creating || (!selectedClient && !clientForm.nom_customer?.trim())}
-          >
-            {creating ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.payButtonText}>FINALISER LE PAIEMENT</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
-      {/* 🔥 MODAL REÇU DE VENTE */}
-      <Modal
-        isVisible={receiptModalVisible}
-        onBackdropPress={() => setReceiptModalVisible(false)}
-        onBackButtonPress={() => setReceiptModalVisible(false)}
-        backdropOpacity={0.7}
-        style={{ margin: 16 }}
-      >
-        <View style={styles.receiptModal}>
-          <Text style={styles.receiptModalTitle}>Reçu de vente</Text>
-          {lastSaleId ? (
-            <>
-              <View style={styles.receiptWebViewWrap}>
-                <WebView
-                  source={{ uri: `${RECEIPT_BASE_URL}${lastSaleId}` }}
-                  style={styles.receiptWebView}
-                  scrollEnabled
-                  startInLoadingState
-                  renderLoading={() => (
-                    <View style={styles.receiptLoading}>
-                      <ActivityIndicator size="large" color={COLORS.primary} />
-                    </View>
-                  )}
-                />
+              <View style={styles.fastTotalBox}>
+                <Text style={styles.fastTotalLabel}>Total</Text>
+                <Text style={styles.fastTotalValue}>
+                  {Number(total || 0).toLocaleString()} FCFA
+                </Text>
               </View>
+
               <TouchableOpacity
-                style={styles.receiptPrintButton}
-                onPress={() => Linking.openURL(`${recu_impression}${lastSaleId}`)}
+                style={styles.fastPayBtn}
+                onPress={submitFastSale}
+                disabled={fastCreating}
               >
-                <Printer size={20} color={COLORS.white} />
-                <Text style={styles.receiptPrintText}>Imprimer</Text>
+                {fastCreating ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <Text style={styles.fastPayText}>Encaisser</Text>
+                )}
               </TouchableOpacity>
-            </>
-          ) : null}
-          <TouchableOpacity
-            style={[styles.receiptPrintButton, { backgroundColor: COLORS.border, marginTop: 8 }]}
-            onPress={() => setReceiptModalVisible(false)}
-          >
-            <Text style={[styles.receiptPrintText, { color: COLORS.text }]}>Fermer</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+            </View>
+          }
+        />
+      </BottomSheet>
     </View>
   )
 }
@@ -1033,6 +1493,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  cartActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
   cartItems: {
     fontSize: 13,
     color: COLORS.muted,
@@ -1048,15 +1513,235 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     borderRadius: 14,
   },
+  fastPayButton: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
   payText: {
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 14,
   },
+  fastPayTextSmall: {
+    color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 13,
+  },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  cameraContainer: {
+    height: Dimensions.get('window').height * 0.4,
+    backgroundColor: COLORS.black,
+    position: 'relative',
+  },
+  cameraView: {
+    flex: 1,
+  },
+  cameraPermissionText: {
+    color: COLORS.white,
+    marginBottom: 16,
+  },
+  scanOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  scanText: {
+    position: 'absolute',
+    bottom: 20,
+    color: COLORS.white,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    fontSize: 14,
+  },
+  scannedListContainer: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+  },
+  scannedListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  scannedListTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  clearAllText: {
+    color: COLORS.danger,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  emptyScannedList: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  emptyScannedText: {
+    color: COLORS.muted,
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  scannedList: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  scannedItem: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    alignItems: 'center',
+  },
+  scannedItemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: COLORS.bg,
+  },
+  scannedItemInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  scannedItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  scannedItemPrice: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  scannedItemQty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  qtyBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyBtnText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  qtyValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  scannedItemActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  addSingleButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addSingleButtonText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  removeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeButtonText: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  scannerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+  scannerActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  addAllButton: {
+    backgroundColor: COLORS.primary,
+  },
+  continueScanButton: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  scannerActionText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  closeScannerButton: {
+    backgroundColor: COLORS.border,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeScannerText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 16,
   },
   // Styles pour les modals react-native-modal
   modalCardPro: {
@@ -1161,24 +1846,103 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: COLORS.primary,
   },
-  clientModal: {
+  clientRnModalOuter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  clientRnModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  clientRnModalSheetWrap: {
+    width: '100%',
+    maxWidth: 440,
     backgroundColor: COLORS.card,
-    borderRadius: 26,
-    padding: 22,
-    maxHeight: '85%',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  /** Onglet Clients : hauteur fixe pour la liste scrollable */
+  clientRnModalSheetWrapExpanded: {
+    height: CLIENT_MODAL_SHEET_HEIGHT,
+  },
+  /** Onglet Nouveau : hauteur suivant le contenu (plafonnée) */
+  clientRnModalSheetWrapCompact: {
+    maxHeight: CLIENT_MODAL_SHEET_HEIGHT,
+  },
+  clientRnModalInner: {
+    flexDirection: 'column',
+  },
+  clientRnModalInnerExpanded: {
+    flex: 1,
+  },
+  clientModalHeader: {
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  clientModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  clientModalClose: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.muted,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: COLORS.text,
-    marginBottom: 14,
+    marginBottom: 0,
+  },
+  clientSheetList: {
+    flex: 1,
+  },
+  clientSheetFooter: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 28,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+  clientSheetFooterCompact: {
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  payButtonModalFooter: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
   },
   clientTabs: {
     flexDirection: 'row',
     backgroundColor: COLORS.bg,
     borderRadius: 14,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  clientSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: COLORS.bg,
+    gap: 10,
+  },
+  clientSearchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.text,
   },
   clientTab: {
     flex: 1,
@@ -1230,6 +1994,53 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 16,
+  },
+  fastContainer: {
+    padding: 20,
+  },
+  fastTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  fastInput: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: COLORS.text,
+    marginBottom: 12,
+    fontSize: 15,
+  },
+  fastTotalBox: {
+    backgroundColor: COLORS.bg,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  fastTotalLabel: {
+    color: COLORS.muted,
+    fontWeight: '600',
+  },
+  fastTotalValue: {
+    color: COLORS.text,
+    fontWeight: '800',
+  },
+  fastPayBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  fastPayText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 15,
   },
   receiptModal: {
     backgroundColor: COLORS.card,

@@ -13,6 +13,7 @@ import {
   User,
   Users,
   Key,
+  FileSignature,
   CreditCard,
   Crown,
   RefreshCw,
@@ -310,6 +311,11 @@ export default function ParametresScreen({ navigation }) {
             icon={<Key size={20} color={COLORS.primary} />}
             title="Gestion entreprise"
             onPress={() => navigation.navigate("Entreprise")}
+          />
+          <MenuItem
+            icon={<FileSignature size={20} color={COLORS.primary} />}
+            title="Signature"
+            onPress={() => navigation.navigate("Signature")}
           />
         </View>
       </ScrollView>

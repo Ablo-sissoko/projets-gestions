@@ -8,6 +8,8 @@ import {
   SectionList,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
+  FlatList,
 } from "react-native"
 import Modal from "react-native-modal"
 import {
@@ -19,6 +21,7 @@ import {
   DollarSign,
   ShoppingBag,
   Tag,
+  Filter,
 } from "lucide-react-native"
 import Header from "../componants/Header"
 import { AuthContext } from "../context/AuthContext"
@@ -39,7 +42,79 @@ export default function RevenusScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [viewRevenu, setViewRevenu] = useState(null)
 
-  const refreshRevenus = async (page = 1, append = false) => {
+  const [filterCategoryName, setFilterCategoryName] = useState("")
+  const [filterProductName, setFilterProductName] = useState("")
+  const [filterEmployeeName, setFilterEmployeeName] = useState("")
+  const [filterDateDepart, setFilterDateDepart] = useState("")
+  const [filterDateFin, setFilterDateFin] = useState("")
+
+  const [categoriesForFilter, setCategoriesForFilter] = useState([])
+  const [employesForFilter, setEmployesForFilter] = useState([])
+  const [pickerOpen, setPickerOpen] = useState(null)
+  const [productSearchQuery, setProductSearchQuery] = useState("")
+  const [productOptions, setProductOptions] = useState([])
+  const [productSearchLoading, setProductSearchLoading] = useState(false)
+
+  const loadCategoriesForFilter = async () => {
+    const entreprise_id = user?.entreprise_id
+    if (!entreprise_id) return
+    try {
+      const response = await api.get(`/sellprox/categories/read/${entreprise_id}`)
+      const results = Array.isArray(response.data?.resultat) ? response.data.resultat : []
+      const formatted = results.map((item) => ({
+        id: String(item.id),
+        name: String(item.name || "").replace(/\s+/g, " ").trim(),
+      }))
+      setCategoriesForFilter(formatted)
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: error.response?.data?.message || error.message || "Impossible de charger les catégories",
+      })
+    }
+  }
+
+  const loadEmployesFromVentes = async () => {
+    const entreprise_id = user?.entreprise_id
+    if (!entreprise_id) return
+    const byKey = new Map()
+    let page = 1
+    let totalPages = 1
+    try {
+      do {
+        const res = await api.post("/sellprox/vente/liste", {
+          totalPage: String(page),
+          client_name: "",
+          email: "",
+          employee_name: "",
+          phone: "",
+          entreprise_id,
+        })
+        const rows = Array.isArray(res.data?.resultat) ? res.data.resultat : []
+        for (const row of rows) {
+          const id = row.employee_id != null ? String(row.employee_id) : ""
+          const name = String(row.employee_name || "").trim()
+          if (!name) continue
+          const key = id || name
+          if (!byKey.has(key)) byKey.set(key, { id: key, name })
+        }
+        totalPages = Math.max(1, Number(res.data?.totalPages) || 1)
+        page += 1
+      } while (page <= totalPages && page <= 40)
+      setEmployesForFilter(
+        Array.from(byKey.values()).sort((a, b) => a.name.localeCompare(b.name, "fr"))
+      )
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: error.response?.data?.message || error.message || "Impossible de charger les employés",
+      })
+    }
+  }
+
+  const refreshRevenus = async (page = 1, append = false, overrides = null) => {
     const entreprise_id = user?.entreprise_id
     if (!entreprise_id) {
       setInitialLoading(false)
@@ -48,15 +123,20 @@ export default function RevenusScreen() {
     }
     if (append) setLoadingMore(true)
 
+    const product_name = (overrides?.product_name !== undefined ? overrides.product_name : filterProductName).trim()
+    const employee_name = (overrides?.employee_name !== undefined ? overrides.employee_name : filterEmployeeName).trim()
+    const dateDepart = (overrides?.dateDepart !== undefined ? overrides.dateDepart : filterDateDepart).trim()
+    const dateFin = (overrides?.dateFin !== undefined ? overrides.dateFin : filterDateFin).trim()
+
     try {
       const response = await api.post(
         "/sellprox/comptabilite/revenu/liste",
         {
           totalPage: String(page),
-          product_name: "",
-          employee_name: "",
-          dateDepart: "",
-          dateFin: "",
+          product_name,
+          employee_name,
+          dateDepart,
+          dateFin,
           entreprise_id,
         }
       )
@@ -106,23 +186,77 @@ export default function RevenusScreen() {
     }
   }
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = async () => {
     setRefreshing(true)
     try {
       await refreshRevenus(1, false)
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
+    if (!user?.entreprise_id) {
+      setInitialLoading(false)
+      return
+    }
+    loadCategoriesForFilter()
+    loadEmployesFromVentes()
     refreshRevenus(1, false)
   }, [user?.entreprise_id])
 
-  const handleLoadMore = useCallback(() => {
+  useEffect(() => {
+    if (pickerOpen !== "prod" || !user?.entreprise_id) return
+    const timeout = setTimeout(async () => {
+      setProductSearchLoading(true)
+      try {
+        const response = await api.post("/sellprox/product/search", {
+          totalPage: "1",
+          nom: productSearchQuery.trim(),
+          id_category: "",
+          id_product: "",
+          code_barre: "",
+          entreprise_id: user.entreprise_id,
+        })
+        const results = Array.isArray(response.data?.resultat) ? response.data.resultat : []
+        setProductOptions(
+          results.map((item) => ({
+            id: String(item.id),
+            name: String(item.product_name || "").trim() || "-",
+          }))
+        )
+      } catch (error) {
+        Toast.show({
+          type: "error",
+          text1: "Erreur",
+          text2: error.response?.data?.message || error.message || "Impossible de charger les produits",
+        })
+        setProductOptions([])
+      } finally {
+        setProductSearchLoading(false)
+      }
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [pickerOpen, productSearchQuery, user?.entreprise_id])
+
+  const openProductPicker = () => {
+    setProductSearchQuery("")
+    setProductOptions([])
+    setPickerOpen("prod")
+  }
+
+  const resetFilters = () => {
+    setFilterCategoryName("")
+    setFilterProductName("")
+    setFilterEmployeeName("")
+    setFilterDateDepart("")
+    setFilterDateFin("")
+  }
+
+  const handleLoadMore = () => {
     if (loadingMore || currentPage >= totalPages) return
-    refreshRevenus(currentPage + 1, true)
-  }, [loadingMore, currentPage, totalPages])
+    refreshRevenus(currentPage + 1, true, null)
+  }
 
   const openView = useCallback((item) => {
     setViewRevenu(item)
@@ -132,15 +266,22 @@ export default function RevenusScreen() {
     setViewRevenu(null)
   }, [])
 
-  const totalBenefice = useMemo(
-    () =>
-      (beneficeTotal ?? revenus.reduce((sum, r) => sum + r.benefice, 0)),
-    [revenus, beneficeTotal]
-  )
+  const displayRevenus = useMemo(() => {
+    const c = filterCategoryName.trim()
+    if (!c) return revenus
+    return revenus.filter((r) => (r.categorie || "").trim() === c)
+  }, [revenus, filterCategoryName])
+
+  const totalBenefice = useMemo(() => {
+    if (filterCategoryName.trim()) {
+      return displayRevenus.reduce((sum, r) => sum + r.benefice, 0)
+    }
+    return beneficeTotal ?? revenus.reduce((sum, r) => sum + r.benefice, 0)
+  }, [displayRevenus, filterCategoryName, beneficeTotal, revenus])
 
   const totalChiffreAffaires = useMemo(
-    () => revenus.reduce((sum, r) => sum + r.prixVente, 0),
-    [revenus]
+    () => displayRevenus.reduce((sum, r) => sum + r.prixVente, 0),
+    [displayRevenus]
   )
 
   const renderItem = useCallback(({ item }) => (
@@ -219,7 +360,7 @@ export default function RevenusScreen() {
 
   const sectionsByDate = useMemo(() => {
     const byDate = new Map()
-    revenus.forEach((r) => {
+    displayRevenus.forEach((r) => {
       const d = r.date || ""
       if (!byDate.has(d)) byDate.set(d, [])
       byDate.get(d).push(r)
@@ -229,7 +370,7 @@ export default function RevenusScreen() {
       title: date,
       data: byDate.get(date),
     }))
-  }, [revenus])
+  }, [displayRevenus])
 
   const renderSectionHeader = useCallback(({ section: { title } }) => (
     <View style={styles.sectionHeader}>
@@ -260,8 +401,10 @@ export default function RevenusScreen() {
     </>
   )
 
+
   const itemSeparator = () => <View style={{ height: 16 }} />
 
+  
   const listFooter = () => {
     if (!loadingMore || currentPage >= totalPages) return null
     return (
@@ -269,7 +412,7 @@ export default function RevenusScreen() {
         <ActivityIndicator size="small" color={COLORS.primary} />
       </View>
     )
-  } 
+  }
 
   if (initialLoading) {
     return <LoadingScreen />
@@ -330,6 +473,113 @@ export default function RevenusScreen() {
           <TouchableOpacity style={styles.modalClose} onPress={closeView}>
             <Text style={styles.modalCloseText}>Fermer</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      <Modal
+        isVisible={pickerOpen === "cat"}
+        onBackdropPress={() => setPickerOpen(null)}
+        style={styles.pickerModalWrap}
+      >
+        <View style={styles.pickerCard}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Catégorie</Text>
+            <TouchableOpacity onPress={() => setPickerOpen(null)}>
+              <Text style={styles.pickerClose}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={[{ id: "__all__", name: "Toutes les catégories" }, ...categoriesForFilter]}
+            keyExtractor={(it) => it.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setFilterCategoryName(item.id === "__all__" ? "" : item.name)
+                  setPickerOpen(null)
+                }}
+              >
+                <Text style={styles.pickerItemText}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
+            style={styles.pickerList}
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
+      </Modal>
+
+      <Modal
+        isVisible={pickerOpen === "emp"}
+        onBackdropPress={() => setPickerOpen(null)}
+        style={styles.pickerModalWrap}
+      >
+        <View style={styles.pickerCard}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Employé</Text>
+            <TouchableOpacity onPress={() => setPickerOpen(null)}>
+              <Text style={styles.pickerClose}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={[{ id: "__all__", name: "Tous les employés" }, ...employesForFilter]}
+            keyExtractor={(it) => it.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerItem}
+                onPress={() => {
+                  setFilterEmployeeName(item.id === "__all__" ? "" : item.name)
+                  setPickerOpen(null)
+                }}
+              >
+                <Text style={styles.pickerItemText}>{item.name}</Text>
+              </TouchableOpacity>
+            )}
+            style={styles.pickerList}
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
+      </Modal>
+
+      <Modal
+        isVisible={pickerOpen === "prod"}
+        onBackdropPress={() => setPickerOpen(null)}
+        style={styles.pickerModalWrap}
+      >
+        <View style={styles.pickerCard}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Produit</Text>
+            <TouchableOpacity onPress={() => setPickerOpen(null)}>
+              <Text style={styles.pickerClose}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.pickerSearch}
+            placeholder="Rechercher un produit…"
+            placeholderTextColor={COLORS.muted}
+            value={productSearchQuery}
+            onChangeText={setProductSearchQuery}
+          />
+          {productSearchLoading ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} color={COLORS.primary} />
+          ) : (
+            <FlatList
+              data={[{ id: "__all__", name: "Tous les produits" }, ...productOptions]}
+              keyExtractor={(it) => it.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerItem}
+                  onPress={() => {
+                    setFilterProductName(item.id === "__all__" ? "" : item.name)
+                    setPickerOpen(null)
+                  }}
+                >
+                  <Text style={styles.pickerItemText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              style={styles.pickerList}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
         </View>
       </Modal>
     </View>
@@ -421,6 +671,144 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 12, color: COLORS.muted, marginBottom: 2 },
   statValue: { fontSize: 12, fontWeight: "600", color: COLORS.text },
+
+  filtersBlock: {
+    marginBottom: 16,
+    gap: 10,
+  },
+  filtersTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  filtersTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  filtersRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  dateFiltersRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  filterDateInput: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  filterActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  filterBtnGhost: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+  filterBtnGhostText: {
+    color: COLORS.text,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  filterBtnPrimary: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+  },
+  filterBtnPrimaryText: {
+    color: COLORS.white,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+
+  pickerModalWrap: {
+    justifyContent: "flex-end",
+    margin: 0,
+  },
+  pickerCard: {
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    maxHeight: "70%",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  pickerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  pickerClose: {
+    color: COLORS.primary,
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  pickerSearch: {
+    marginTop: 12,
+    backgroundColor: COLORS.bg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.text,
+  },
+  pickerList: {
+    marginTop: 8,
+  },
+  pickerItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  pickerItemText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
 
   filterChipActive: {
     alignSelf: "flex-start",

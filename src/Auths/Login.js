@@ -40,8 +40,25 @@ export default function LoginScreen({ navigation }) {
 
             const response = await api.post("/sellprox/login", { email, password });
 
+
+           
+
             if (response.data?.status == 1) {
-                const userInfos = response.data.userInfos;
+                const raw = response.data.userInfos || {};
+                /* categoryIdBoutique → navigation / getEntrepriseConfig ; categoryBoutique → libellé affiché */
+                const signatureFromApi =
+                    raw.signatureBoutique ??
+                    raw.signature_url ??
+                    raw.signatureUrl ??
+                    raw.signature ??
+                    null;
+                const userInfos = {
+                    ...raw,
+                    category_id: raw.categoryIdBoutique ?? raw.category_id,
+                    ...(signatureFromApi != null && String(signatureFromApi).trim() !== ""
+                        ? { signatureBoutique: String(signatureFromApi).trim() }
+                        : {}),
+                };
                 const accessToken = response.data.access_token;
                 await login(accessToken, userInfos);
 
@@ -52,6 +69,7 @@ export default function LoginScreen({ navigation }) {
                 });
 
                 navigation.replace("Drawer");
+
             } else {
                 Toast.show({
                     type: "error",

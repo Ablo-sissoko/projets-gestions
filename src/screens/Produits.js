@@ -1,4 +1,5 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import {
   FlatList,
   StyleSheet,
@@ -13,10 +14,12 @@ import {
   Platform,
   ScrollView,
   KeyboardAvoidingView,
-  Modal as RNModal
+  Modal as RNModal,
+  Alert,
 } from 'react-native'
 import Modal from 'react-native-modal'
-import { Modalize } from 'react-native-modalize'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
+import { Dropdown } from 'react-native-element-dropdown'
 import {
   Search,
   Filter,
@@ -36,85 +39,35 @@ import Header from '../componants/Header'
 import { AuthContext } from '../context/AuthContext'
 import api from '../api/Axios'
 import LoadingScreen from '../componants/LoadingScreen'
-import { launchImageLibrary } from 'react-native-image-picker'
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker'
 import { CameraView, useCameraPermissions } from "expo-camera"
 import COLORS from '../constants/couleurs'
 
-/* ===================== COMPOSANT MODAL DE SÉLECTION ===================== */
-const SelectionModal = ({ visible, onClose, title, items, onSelect, selectedId }) => {
-  return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onClose}
-      onBackButtonPress={onClose}
-      style={styles.selectionModal}
-      animationIn="slideInUp"
-      animationOut="slideOutDown"
-      backdropOpacity={0.5}
-    >
-      <View style={styles.selectionModalContent}>
-        <View style={styles.selectionModalHeader}>
-          <Text style={styles.selectionModalTitle}>{title}</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.selectionModalClose}>X</Text>
-          </TouchableOpacity>
-        </View>
+/** POST relatif à api baseURL — URL complète : …/sellprox/encaissement/services/create/new */
+const SELLPROX_SERVICE_CREATE_NEW = '/sellprox/encaissement/services/create/new'
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {items.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                styles.selectionItem,
-                selectedId === item.id && styles.selectionItemSelected
-              ]}
-              onPress={() => {
-                onSelect(item)
-                onClose()
-              }}
-            >
-              <Text
-                style={[
-                  styles.selectionItemText,
-                  selectedId === item.id && styles.selectionItemTextSelected
-                ]}
-              >
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <TouchableOpacity 
-          style={{ paddingVertical:5,paddingHorizontal:6,borderRadius:10,backgroundColor:COLORS.primary,marginVertical:5,marginHorizontal:8, justifyContent:"center",alignItems:'center'}} 
-          onPress={onClose}
-        >
-          <Text style={{ color: COLORS.white }}>fermer</Text>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  )
-}
+const sellproxProductLogoUpdatePath = (productId) =>
+  `/sellprox/product/update/logo/${productId}`
 
 /* ===================== COMPOSANT HEADER LISTE ===================== */
-const ListHeaderComponent = React.memo(({ 
-  title, 
-  subtitle, 
-  onAddPress, 
-  searchQuery, 
-  onSearchChange, 
+const ListHeaderComponent = React.memo(({
+  title,
+  subtitle,
+  onAddPress,
+  searchQuery,
+  onSearchChange,
   onFilterPress,
-  searchLoading 
+  searchLoading,
+  mode,
+  onModeChange
 }) => {
   return (
     <>
       <View style={styles.headerRow}>
-        <View>
+    <View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
-        </View>
+    </View>
 
         <TouchableOpacity style={styles.addButton} onPress={onAddPress}>
           <Plus size={18} color={COLORS.white} />
@@ -126,7 +79,7 @@ const ListHeaderComponent = React.memo(({
         <View style={styles.searchBox}>
           <Search size={18} color={COLORS.muted} />
           <TextInput
-            placeholder="Rechercher un produit..."
+            placeholder={mode === 'service' ? 'Rechercher un service...' : 'Rechercher un produit...'}
             placeholderTextColor={COLORS.muted}
             style={styles.searchInput}
             value={searchQuery}
@@ -145,6 +98,7 @@ const ListHeaderComponent = React.memo(({
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
       ) : null}
+
     </>
   )
 })
@@ -153,6 +107,7 @@ const ListHeaderComponent = React.memo(({
 const Products = () => {
   const { user } = useContext(AuthContext)
   const [products, setProducts] = useState([])
+  const [mode, setMode] = useState('product')
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [filterForm, setFilterForm] = useState({
@@ -163,6 +118,7 @@ const Products = () => {
   })
   const [categoriesList, setCategoriesList] = useState([])
   const [unitsList, setUnitsList] = useState([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
   const [searchLoading, setSearchLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -172,6 +128,9 @@ const Products = () => {
   const [viewProduct, setViewProduct] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [editMode, setEditMode] = useState('add')
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [creatingCategory, setCreatingCategory] = useState(false)
   const [form, setForm] = useState({
     id: '',
     product_name: '',
@@ -184,14 +143,13 @@ const Products = () => {
     code_barre: '',
     unite_product: '',
     image: null,
+    /** Aperçu uniquement (édition produit), pas un fichier à envoyer avec /product/update */
+    imageUrlExisting: '',
     entreprise_id: '',
     user_id: '',
   })
 
   // Modals visibility
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false)
-  const [unitModalVisible, setUnitModalVisible] = useState(false)
-  const [filterCategoryModalVisible, setFilterCategoryModalVisible] = useState(false)
 
   // Scanner states
   const [cameraPermission, requestPermission] = useCameraPermissions()
@@ -202,15 +160,33 @@ const Products = () => {
   const bottomSheetRef = useRef(null)
   const filterSheetRef = useRef(null)
   const deleteSheetRef = useRef(null)
+  const sheetSnapPoints = useMemo(() => ['60%'], [])
+  const filterSnapPoints = useMemo(() => ['60%'], [])
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   useEffect(() => {
     refreshProducts(1, false, false)
   }, [user?.entreprise_id])
 
-  useEffect(() => {
-    fetchCategories()
-    fetchUnits()
-  }, [user?.entreprise_id])
+  useFocusEffect(
+    useCallback(() => {
+      const id = user?.entreprise_id
+      if (!id) return
+      fetchCategories()
+      fetchUnits()
+    }, [user?.entreprise_id])
+  )
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -262,8 +238,10 @@ const Products = () => {
         img_original_name: item.img_original_name,
         img_size: item.img_size,
         taux_marge: item.taux_marge,
- 
+        types: item.types,
+
       }))
+
 
       const nextPage = Number(response.data?.currentPage || page)
       const nextTotal = Number(response.data?.totalPages || 1)
@@ -286,8 +264,12 @@ const Products = () => {
   }
 
   const fetchCategories = async () => {
+    setCategoriesLoading(true)
     const entreprise_id = user?.entreprise_id
-    if (!entreprise_id) return
+    if (!entreprise_id) {
+      setCategoriesLoading(false)
+      return
+    }
     try {
       const response = await api.get(`/sellprox/categories/read/${entreprise_id}`)
       const results = Array.isArray(response.data?.resultat)
@@ -304,6 +286,57 @@ const Products = () => {
         text1: 'Erreur',
         text2: error.response?.data?.message || error.message || 'Impossible de charger les catégories',
       })
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
+  const createCategory = async () => {
+    if (!newCategoryName.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: 'Nom de catégorie requis',
+      })
+      return
+    }
+    const entreprise_id = user?.entreprise_id
+    if (!entreprise_id) return
+    setCreatingCategory(true)
+    try {
+      const response = await api.post('/sellprox/categories/create', {
+        entreprise_id,
+        category_name: newCategoryName,
+      })
+      const ok = response.data?.status === 1 || response.data?.status === true
+      if (ok) {
+        Toast.show({
+          type: 'success',
+          text1: 'Succès',
+          text2: 'Catégorie créée',
+        })
+        const newCat = response.data?.resultat
+        setNewCategoryName('')
+        setCategoryModalVisible(false)
+        await fetchCategories()
+        if (newCat?.id) {
+          setForm(prev => ({ ...prev, category_id: String(newCat.id) }))
+        }
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Erreur',
+          text2: response.data?.msg || 'Erreur création',
+        })
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: error.message,
+      })
+    } finally {
+      setCreatingCategory(false)
     }
   }
 
@@ -337,19 +370,20 @@ const Products = () => {
     setRefreshing(true)
     try {
       await refreshProducts(1, false, false)
+      await Promise.all([fetchCategories(), fetchUnits()])
       Toast.show({
         type: 'success',
         text1: 'Liste actualisée',
-        text2: 'Produits récupérés',
+        text2: 'Produits et catégories à jour',
       })
-    } catch (_) {}
+    } catch (_) { }
     finally {
       setRefreshing(false)
     }
   }, [filterForm, searchQuery])
 
   const openFilters = useCallback(() => {
-    filterSheetRef.current?.open()
+    filterSheetRef.current?.expand()
   }, [])
 
   const resetFilters = useCallback(() => {
@@ -412,14 +446,19 @@ const Products = () => {
       code_barre: '',
       unite_product: '',
       image: null,
+      imageUrlExisting: '',
       entreprise_id: '',
       user_id: '',
     })
-    bottomSheetRef.current?.open()
+
+    bottomSheetRef.current?.expand()
+
+
   }, [])
 
   const openEdit = useCallback((product) => {
     setEditMode('edit')
+    const previewUrl = getProductImageUrl(product)
     setForm({
       id: product.id,
       product_name: product.productName === '-' ? '' : product.productName,
@@ -432,47 +471,69 @@ const Products = () => {
       code_barre: product.code_barre || '',
       unite_product: product.unite_product || '',
       image: null,
+      imageUrlExisting: previewUrl !== IMAGE_PLACEHOLDER ? previewUrl : '',
       entreprise_id: user?.entreprise_id ?? '',
       user_id: user?.id ?? '',
     })
-    bottomSheetRef.current?.open()
-  }, [user])
+    bottomSheetRef.current?.expand()
+  }, [user, getProductImageUrl])
+
+  const productImagePickerOptions = {
+    mediaType: 'photo',
+    includeBase64: false,
+    maxHeight: 1000,
+    maxWidth: 1000,
+    quality: 0.8,
+  }
+
+  const onProductImagePickerResult = useCallback((response) => {
+    if (response.didCancel) return
+    const errMsg = response.errorMessage || response.error
+    if (response.errorCode || errMsg) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: errMsg || 'Impossible d\'obtenir l\'image (caméra ou galerie).',
+      })
+      return
+    }
+    if (!response.assets?.length) return
+    const asset = response.assets[0]
+    const fileName =
+      asset.fileName || asset.uri?.split('/').pop() || `photo_${Date.now()}.jpg`
+    const mimeType = asset.type || 'image/jpeg'
+    setForm((prev) => ({
+      ...prev,
+      image: {
+        uri: asset.uri,
+        name: fileName,
+        type: mimeType,
+      },
+    }))
+  }, [])
+
+  const openProductImageGallery = useCallback(() => {
+    launchImageLibrary(
+      { ...productImagePickerOptions, selectionLimit: 1 },
+      onProductImagePickerResult
+    )
+  }, [onProductImagePickerResult])
+
+  const openProductImageCamera = useCallback(() => {
+    launchCamera(productImagePickerOptions, onProductImagePickerResult)
+  }, [onProductImagePickerResult])
 
   const pickProductImage = useCallback(() => {
-    const options = {
-      mediaType: 'photo',
-      includeBase64: false,
-      maxHeight: 1000,
-      maxWidth: 1000,
-      quality: 0.8,
-    }
-
-    launchImageLibrary(options, (response) => {
-      if (response.didCancel) {
-        // Annulé par l'utilisateur
-      } else if (response.error) {
-        Toast.show({
-          type: 'error',
-          text1: 'Erreur',
-          text2: response.error || 'Erreur lors de la sélection de l\'image',
-        })
-      } else if (response.assets && response.assets.length > 0) {
-        const asset = response.assets[0]
-
-        const fileName = asset.fileName || asset.uri?.split('/').pop() || `photo_${Date.now()}.jpg`
-        const mimeType = asset.type || 'image/jpeg'
-
-        setForm((prev) => ({
-          ...prev,
-          image: {
-            uri: asset.uri,
-            name: fileName,
-            type: mimeType,
-          },
-        }))
-      }
-    })
-  }, [])
+    Alert.alert(
+      'Image du produit',
+      'Prendre une photo ou choisir une image dans la galerie.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Galerie', onPress: openProductImageGallery },
+        { text: 'Appareil photo', onPress: openProductImageCamera },
+      ]
+    )
+  }, [openProductImageGallery, openProductImageCamera])
 
   // Gestionnaire de scan pour le code barre
   const handleBarCodeScanned = useCallback(async ({ data }) => {
@@ -517,17 +578,21 @@ const Products = () => {
       return
     }
 
+    const buildImageFile = () => {
+      if (!form.image?.uri) return null
+      return {
+        uri: Platform.OS === 'ios' ? form.image.uri.replace('file://', '') : form.image.uri,
+        name: form.image.name || `photo_${Date.now()}.jpg`,
+        type: form.image.type || 'image/jpeg',
+      }
+    }
+
     try {
       const formData = new FormData()
 
-      if (form.image?.uri) {
-        const imageFile = {
-          uri: Platform.OS === 'ios' ? form.image.uri.replace('file://', '') : form.image.uri,
-          name: form.image.name || `photo_${Date.now()}.jpg`,
-          type: form.image.type || 'image/jpeg',
-        }
-
-        formData.append('image', imageFile)
+      if (editMode === 'add') {
+        const imageFile = buildImageFile()
+        if (imageFile) formData.append('image', imageFile)
       }
 
       formData.append('entreprise_id', String(entreprise_id))
@@ -581,10 +646,40 @@ const Products = () => {
         if (response.data) {
           const ok = response.data.status === 1 || response.data.status === true || response.data.status === 200 || response.status === 200
           if (ok) {
+            const imageFile = buildImageFile()
+            let logoFailMsg = null
+            if (imageFile) {
+              try {
+                const logoFd = new FormData()
+                logoFd.append('image', imageFile)
+                const logoRes = await api.post(sellproxProductLogoUpdatePath(form.id), logoFd, {
+                  headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'multipart/form-data',
+                  },
+                  timeout: 60000,
+                })
+                const logoOk =
+                  logoRes.data?.status === 1 ||
+                  logoRes.data?.status === true ||
+                  logoRes.data?.status === 200 ||
+                  logoRes.status === 200
+                if (!logoOk) {
+                  logoFailMsg = logoRes.data?.msg || 'Échec du téléversement de l’image'
+                }
+              } catch (logoErr) {
+                logoFailMsg =
+                  logoErr.response?.data?.msg ||
+                  logoErr.response?.data?.message ||
+                  'Échec du téléversement de l’image'
+              }
+            }
             Toast.show({
-              type: 'success',
-              text1: 'Succès',
-              text2: response.data.msg || 'Produit modifié avec succès !',
+              type: logoFailMsg ? 'info' : 'success',
+              text1: logoFailMsg ? 'Produit enregistré' : 'Succès',
+              text2: logoFailMsg
+                ? `${response.data.msg || 'Modifications enregistrées.'} — ${logoFailMsg}`
+                : response.data.msg || 'Produit modifié avec succès !',
             })
             bottomSheetRef.current?.close()
             refreshProducts(1, false, false)
@@ -603,6 +698,112 @@ const Products = () => {
         type: 'error',
         text1: 'Erreur',
         text2: error.response?.data?.message || error.message || 'Une erreur est survenue',
+      })
+    }
+  }
+
+  const saveService = async () => {
+    const entreprise_id = user?.entreprise_id
+    const user_id = user?.id
+    if (!entreprise_id || !user_id) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: 'Session expirée. Veuillez vous reconnecter.',
+      })
+      return
+    }
+    if (!form.product_name?.trim() || !form.category_id) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: 'Nom et catégorie obligatoires',
+      })
+      return
+    }
+    const priceNum = Number(String(form.price).replace(/\s/g, '').replace(',', '.'))
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2: 'Indiquez un prix valide',
+      })
+      return
+    }
+
+    try {
+      const payload = {
+        entreprise_id: String(entreprise_id),
+        user_id: Number(user_id),
+        product_name: String(form.product_name).trim(),
+        description: String(form.description || '').trim(),
+        price: priceNum,
+        category_id: Number(form.category_id),
+        unite_product: String(form.unite_product || '').trim(),
+        types: 'Service',
+      }
+
+      let response
+      if (form.image?.uri) {
+        const fd = new FormData()
+        fd.append('entreprise_id', String(entreprise_id))
+        fd.append('user_id', String(user_id))
+        fd.append('product_name', payload.product_name)
+        fd.append('description', payload.description)
+        fd.append('price', String(priceNum))
+        fd.append('category_id', String(form.category_id))
+        fd.append('unite_product', payload.unite_product)
+        fd.append('types', 'Service')
+        const imageFile = {
+          uri: Platform.OS === 'ios' ? form.image.uri.replace('file://', '') : form.image.uri,
+          name: form.image.name || `photo_${Date.now()}.jpg`,
+          type: form.image.type || 'image/jpeg',
+        }
+        fd.append('image', imageFile)
+        response = await api.post(SELLPROX_SERVICE_CREATE_NEW, fd, {
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+          timeout: 60000,
+        })
+      } else {
+        response = await api.post(SELLPROX_SERVICE_CREATE_NEW, payload, {
+          headers: { Accept: 'application/json' },
+          timeout: 60000,
+        })
+      }
+
+      const ok =
+        response.data?.status === 1 ||
+        response.data?.status === 200 ||
+        response.data?.status === true ||
+        response.status === 200
+
+      if (ok) {
+        Toast.show({
+          type: 'success',
+          text1: 'Succès',
+          text2: response.data?.msg || 'Service créé',
+        })
+        bottomSheetRef.current?.close()
+        refreshProducts(1, false, false)
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Erreur',
+          text2: response.data?.msg || response.data?.message || 'Erreur lors de la création',
+        })
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur',
+        text2:
+          error.response?.data?.message ||
+          error.response?.data?.msg ||
+          error.message ||
+          'Une erreur est survenue',
       })
     }
   }
@@ -641,15 +842,20 @@ const Products = () => {
         <View style={styles.cardTop}>
           <Text style={styles.code}> ID : #{item.id} </Text>
           <Text style={styles.infoText}>
-          <StatusBadge status={item.status} />
+            <StatusBadge status={item.status} />
           </Text>
         </View>
 
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.cardImage}
-          resizeMode="cover"
-        />
+        <View style={styles.cardImageWrapper}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeBadgeText}>{item.types}</Text>
+          </View>
+        </View>
 
         <Text style={styles.productName}>{item.productName}</Text>
 
@@ -689,7 +895,7 @@ const Products = () => {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 30}
     >
       <View style={styles.wrapper}>
         <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
@@ -709,22 +915,9 @@ const Products = () => {
               onSearchChange={setSearchQuery}
               onFilterPress={openFilters}
               searchLoading={searchLoading}
+              mode={mode}
+              onModeChange={setMode}
             />
-          }
-          ListFooterComponent={
-            currentPage < totalPages ? (
-              <TouchableOpacity
-                style={styles.loadMore}
-                onPress={handleLoadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore ? (
-                  <ActivityIndicator color={COLORS.white} />
-                ) : (
-                  <Text style={styles.loadMoreText}>Charger plus</Text>
-                )}
-              </TouchableOpacity>
-            ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -751,10 +944,10 @@ const Products = () => {
             setScanningForField(null)
           }}
         >
-          <View style={{ flex: 1, backgroundColor: "black" }}>
+          <View style={{ flex: 1, backgroundColor: "black", marginVertical: 90, marginHorizontal: 10, borderRadius: 10, overflow: 'hidden' }}>
             {cameraPermission?.granted ? (
               <CameraView
-                style={{ flex: 1 }}
+                style={{ flex: 1, }}
                 facing="back"
                 barcodeScannerSettings={{
                   barcodeTypes: ["ean13", "ean8", "code128", "qr"],
@@ -855,269 +1048,495 @@ const Products = () => {
           </View>
         </Modal>
 
-        {/* MODALS DE SÉLECTION */}
-        <SelectionModal
-          visible={categoryModalVisible}
-          onClose={() => setCategoryModalVisible(false)}
-          title="Choisir une catégorie"
-          items={categoriesList}
-          selectedId={form.category_id}
-          onSelect={(item) => setForm(prev => ({ ...prev, category_id: item.id }))}
-        />
-
-        <SelectionModal
-          visible={unitModalVisible}
-          onClose={() => setUnitModalVisible(false)}
-          title="Choisir une unité"
-          items={unitsList}
-          selectedId={form.unite_product}
-          onSelect={(item) => setForm(prev => ({ ...prev, unite_product: item.name }))}
-        />
-
-        <SelectionModal
-          visible={filterCategoryModalVisible}
-          onClose={() => setFilterCategoryModalVisible(false)}
-          title="Choisir une catégorie"
-          items={categoriesList}
-          selectedId={filterForm.id_category}
-          onSelect={(item) => setFilterForm(prev => ({ ...prev, id_category: item.id }))}
-        />
-
         {/* BOTTOM SHEET AJOUT/MODIFICATION PRODUIT */}
-        <Modalize
+        <BottomSheet
           ref={bottomSheetRef}
-          modalHeight={600}
-          scrollViewProps={{
-            showsVerticalScrollIndicator: false,
-            keyboardShouldPersistTaps: 'handled',
-          }}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
         >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
             keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.sheetContent}>
-              <Text style={styles.sheetTitle}>
-                {editMode === 'add' ? 'Ajouter un produit' : 'Modifier le produit'}
-              </Text>
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
+                <View style={styles.switchContainer}>
+                  <TouchableOpacity
+                    style={[styles.switchBtn, mode === 'product' && styles.switchActive]}
+                    onPress={() => setMode('product')}
+                  >
+                    <Text style={mode === 'product' ? styles.switchTextActive : styles.switchText}>
+                      Produits
+                    </Text>
+                  </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={[styles.switchBtn, mode === 'service' && styles.switchActive]}
+                    onPress={() => setMode('service')}
+                  >
+                    <Text style={mode === 'service' ? styles.switchTextActive : styles.switchText}>
+                      Services
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.sheetTitle}>
+                  {mode === 'product'
+                    ? (editMode === 'add' ? 'Ajouter un produit' : 'Modifier le produit')
+                    : 'Ajouter un service'}
+                </Text>
+
+                {mode === 'product' ? (
+                  <>
+                    <TextInput
+                      style={styles.sheetInput}
+                      placeholder="Produit *"
+                      value={form.product_name}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, product_name: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                    />
+
+                    <View style={styles.dropdownRowWithAction}>
+
+                      {
+                        categoriesLoading ? (
+                          <View style={styles.emptyCategoryBox}>
+                            <ActivityIndicator size="small" color={COLORS.primary} />
+                          </View>
+                        ) : !categoriesList || categoriesList.length === 0 ? (
+                          <View style={styles.emptyCategoryBox}>
+                            <Text style={styles.emptyCategoryTitle}>
+                              Aucune catégorie disponible.
+                            </Text>
+                            <Text style={styles.emptyCategoryText}>
+                              Créez une nouvelle catégorie via le bouton ci‑dessous
+                              ou allez à l’écran des catégories.
+                            </Text>
+                            <TouchableOpacity
+                              style={[styles.addCategoryBtn, styles.addCategoryBtnEmpty]}
+                              onPress={() => setCategoryModalVisible(true)}
+                            >
+                              <Plus size={16} color={COLORS.white} />
+                              <Text style={styles.addCategoryText}>Créer</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : <Dropdown
+                          style={[styles.dropdown, styles.dropdownFlex]}
+                          placeholderStyle={styles.dropdownPlaceholder}
+                          selectedTextStyle={styles.dropdownSelected}
+                          inputSearchStyle={styles.dropdownSearchInput}
+                          data={categoriesList}
+                          search
+                          maxHeight={300}
+                          labelField="name"
+                          valueField="id"
+                          placeholder="Catégorie *"
+                          searchPlaceholder="Rechercher..."
+                          value={form.category_id}
+                          onChange={(item) => setForm(prev => ({ ...prev, category_id: item.id }))}
+                          containerStyle={styles.dropdownContainer}
+                          itemTextStyle={styles.dropdownItemText}
+                          flatListProps={{
+                            bounces: false,
+                            contentContainerStyle: { paddingBottom: 20 },
+                          }}
+                        />
+                      }
+                    </View>
+
+                    <TextInput
+                      style={[styles.sheetInput, styles.textArea]}
+                      placeholder="Description"
+                      value={form.description}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, description: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+
+                    <TouchableOpacity
+                      style={styles.imagePickerButton}
+                      onPress={pickProductImage}
+                    >
+                      <Text style={styles.imagePickerText}>
+                        {form.image?.uri || form.imageUrlExisting
+                          ? 'Changer l’image (photo ou galerie)'
+                          : 'Ajouter une image (photo ou galerie)'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {form.image?.uri || form.imageUrlExisting ? (
+                      <Image
+                        source={{ uri: form.image?.uri || form.imageUrlExisting }}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+
+                    <View style={styles.rowInputs}>
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1, marginRight: 8 }]}
+                        placeholder="Prix d'achat"
+                        value={form.prix_achat}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, prix_achat: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                        keyboardType="numeric"
+                      />
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1 }]}
+                        placeholder="Prix *"
+                        value={form.price}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, price: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                        keyboardType="numeric"
+                      />
+                    </View>
+
+                    <View style={styles.rowInputs}>
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1, marginRight: 8 }]}
+                        placeholder="Stock"
+                        value={form.stock}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, stock: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                        keyboardType="numeric"
+                      />
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1 }]}
+                        placeholder="Stock min"
+                        value={form.stock_min}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, stock_min: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                        keyboardType="numeric"
+                      />
+                    </View>
+
+                    <View style={styles.barcodeRow}>
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1 }]}
+                        placeholder="Code barre"
+                        value={form.code_barre}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, code_barre: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                      />
+                      <TouchableOpacity
+                        style={styles.scanButton}
+                        onPress={() => openScanner('code_barre')}
+                      >
+                        <QrCode size={20} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.dropdownRow}>
+                      <Dropdown
+                        style={styles.dropdown}
+                        placeholderStyle={styles.dropdownPlaceholder}
+                        selectedTextStyle={styles.dropdownSelected}
+                        inputSearchStyle={styles.dropdownSearchInput}
+                        data={unitsList}
+                        search
+                        maxHeight={300}
+                        labelField="name"
+                        valueField="name"
+                        placeholder="Unité"
+                        searchPlaceholder="Rechercher..."
+                        value={form.unite_product}
+                        onChange={(item) => setForm(prev => ({ ...prev, unite_product: item.name }))}
+                        containerStyle={styles.dropdownContainer}
+                        itemTextStyle={styles.dropdownItemText}
+                        flatListProps={{
+                          bounces: false,
+                          contentContainerStyle: { paddingBottom: 20 },
+                        }}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.sheetInput}
+                      placeholder="Nom du service *"
+                      value={form.product_name}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, product_name: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                    />
+
+                    <View style={styles.dropdownRowWithAction}>
+                      {categoriesLoading ? (
+                        <View style={styles.emptyCategoryBox}>
+                          <ActivityIndicator size="small" color={COLORS.primary} />
+                        </View>
+                      ) : !categoriesList || categoriesList.length === 0 ? (
+                        <View style={styles.emptyCategoryBox}>
+                          <Text style={styles.emptyCategoryTitle}>Aucune catégorie disponible.</Text>
+                          <TouchableOpacity
+                            style={[styles.addCategoryBtn, styles.addCategoryBtnEmpty]}
+                            onPress={() => setCategoryModalVisible(true)}
+                          >
+                            <Plus size={16} color={COLORS.white} />
+                            <Text style={styles.addCategoryText}>Créer</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <Dropdown
+                          style={[styles.dropdown, styles.dropdownFlex]}
+                          placeholderStyle={styles.dropdownPlaceholder}
+                          selectedTextStyle={styles.dropdownSelected}
+                          inputSearchStyle={styles.dropdownSearchInput}
+                          data={categoriesList}
+                          search
+                          maxHeight={300}
+                          labelField="name"
+                          valueField="id"
+                          placeholder="Catégorie *"
+                          searchPlaceholder="Rechercher..."
+                          value={form.category_id}
+                          onChange={(item) => setForm((prev) => ({ ...prev, category_id: item.id }))}
+                          containerStyle={styles.dropdownContainer}
+                          itemTextStyle={styles.dropdownItemText}
+                          flatListProps={{
+                            bounces: false,
+                            contentContainerStyle: { paddingBottom: 20 },
+                          }}
+                        />
+                      )}
+                    </View>
+
+                    <TextInput
+                      style={[styles.sheetInput, styles.textArea]}
+                      placeholder="Description"
+                      value={form.description}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, description: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+
+                    <TouchableOpacity
+                      style={styles.imagePickerButton}
+                      onPress={pickProductImage}
+                    >
+                      <Text style={styles.imagePickerText}>
+                        {form.image?.uri
+                          ? 'Changer l’image (photo ou galerie)'
+                          : 'Ajouter une image (photo ou galerie)'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {form.image?.uri ? (
+                      <Image
+                        source={{ uri: form.image.uri }}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+
+                    <TextInput
+                      style={styles.sheetInput}
+                      placeholder="Prix de vente *"
+                      value={form.price}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, price: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                      keyboardType="numeric"
+                    />
+
+                    <View style={styles.dropdownRow}>
+                      <Dropdown
+                        style={styles.dropdown}
+                        placeholderStyle={styles.dropdownPlaceholder}
+                        selectedTextStyle={styles.dropdownSelected}
+                        inputSearchStyle={styles.dropdownSearchInput}
+                        data={unitsList}
+                        search
+                        maxHeight={300}
+                        labelField="name"
+                        valueField="name"
+                        placeholder="Unité (ex. pc)"
+                        searchPlaceholder="Rechercher..."
+                        value={form.unite_product}
+                        onChange={(item) => setForm((prev) => ({ ...prev, unite_product: item.name }))}
+                        containerStyle={styles.dropdownContainer}
+                        itemTextStyle={styles.dropdownItemText}
+                        flatListProps={{
+                          bounces: false,
+                          contentContainerStyle: { paddingBottom: 20 },
+                        }}
+                      />
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={() => bottomSheetRef.current?.close()}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sheetButton}
+                    onPress={mode === 'product' ? saveProduct : saveService}
+                  >
+                    <Text style={styles.sheetButtonText}>
+                      {editMode === 'add' ? 'Ajouter' : 'Enregistrer'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            }
+          />
+        </BottomSheet>
+
+        {/* BOTTOM SHEET FILTRES */}
+        <BottomSheet
+          ref={filterSheetRef}
+          index={-1}
+          snapPoints={filterSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
+                <Text style={styles.sheetTitle}>Filtrer les produits</Text>
+
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom du produit"
+                  value={filterForm.nom}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, nom: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
+
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Code barre"
+                  value={filterForm.code_barre}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, code_barre: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
+
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="ID produit"
+                  value={filterForm.id_product}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, id_product: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                  keyboardType="numeric"
+                />
+
+                <View style={styles.dropdownRow}>
+                  <Dropdown
+                    style={styles.dropdown}
+                    placeholderStyle={styles.dropdownPlaceholder}
+                    selectedTextStyle={styles.dropdownSelected}
+                    inputSearchStyle={styles.dropdownSearchInput}
+                    data={categoriesList}
+                    search
+                    maxHeight={300}
+                    labelField="name"
+                    valueField="id"
+                    placeholder="Catégorie"
+                    searchPlaceholder="Rechercher..."
+                    value={filterForm.id_category}
+                    onChange={(item) => setFilterForm(prev => ({ ...prev, id_category: item.id }))}
+                    containerStyle={styles.dropdownContainer}
+                    itemTextStyle={styles.dropdownItemText}
+                    flatListProps={{
+                      bounces: false,
+                      contentContainerStyle: { paddingBottom: 20 },
+                    }}
+                  />
+                </View>
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={resetFilters}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
+                    <Text style={styles.sheetButtonText}>Appliquer</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            }
+          />
+        </BottomSheet>
+
+        <RNModal
+          visible={categoryModalVisible}
+          transparent
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.categoryModal}>
+              <Text style={styles.modalTitle}>Nouvelle catégorie</Text>
               <TextInput
                 style={styles.sheetInput}
-                placeholder="Produit *"
-                value={form.product_name}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, product_name: value }))
-                }
+                placeholder="Nom de la catégorie"
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
                 placeholderTextColor={COLORS.muted}
               />
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setCategoryModalVisible(true)}
-              >
-                <Text
-                  style={
-                    form.category_id ? styles.selectText : styles.selectPlaceholder
-                  }
-                >
-                  {form.category_id
-                    ? categoriesList.find((c) => c.id === form.category_id)?.name ||
-                    'Catégorie *'
-                    : 'Catégorie *'}
-                </Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={[styles.sheetInput, styles.textArea]}
-                placeholder="Description"
-                value={form.description}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, description: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-
-              <TouchableOpacity
-                style={styles.imagePickerButton}
-                onPress={pickProductImage}
-              >
-                <Text style={styles.imagePickerText}>
-                  {form.image?.uri ? 'Changer l’image' : 'Ajouter une image'}
-                </Text>
-              </TouchableOpacity>
-
-              {form.image?.uri ? (
-                <Image
-                  source={{ uri: form.image.uri }}
-                  style={styles.imagePreview}
-                  resizeMode="cover"
-                />
-              ) : null}
-
-              <View style={styles.rowInputs}>
-                <TextInput
-                  style={[styles.sheetInput, { flex: 1, marginRight: 8 }]}
-                  placeholder="Prix d'achat"
-                  value={form.prix_achat}
-                  onChangeText={(value) =>
-                    setForm((prev) => ({ ...prev, prix_achat: value }))
-                  }
-                  placeholderTextColor={COLORS.muted}
-                  keyboardType="numeric"
-                />
-                <TextInput
-                  style={[styles.sheetInput, { flex: 1 }]}
-                  placeholder="Prix *"
-                  value={form.price}
-                  onChangeText={(value) =>
-                    setForm((prev) => ({ ...prev, price: value }))
-                  }
-                  placeholderTextColor={COLORS.muted}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={styles.rowInputs}>
-                <TextInput
-                  style={[styles.sheetInput, { flex: 1, marginRight: 8 }]}
-                  placeholder="Stock"
-                  value={form.stock}
-                  onChangeText={(value) =>
-                    setForm((prev) => ({ ...prev, stock: value }))
-                  }
-                  placeholderTextColor={COLORS.muted}
-                  keyboardType="numeric"
-                />
-                <TextInput
-                  style={[styles.sheetInput, { flex: 1 }]}
-                  placeholder="Stock min"
-                  value={form.stock_min}
-                  onChangeText={(value) =>
-                    setForm((prev) => ({ ...prev, stock_min: value }))
-                  }
-                  placeholderTextColor={COLORS.muted}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View style={styles.barcodeRow}>
-                <TextInput
-                  style={[styles.sheetInput, { flex: 1 }]}
-                  placeholder="Code barre"
-                  value={form.code_barre}
-                  onChangeText={(value) =>
-                    setForm((prev) => ({ ...prev, code_barre: value }))
-                  }
-                  placeholderTextColor={COLORS.muted}
-                />
-                <TouchableOpacity
-                  style={styles.scanButton}
-                  onPress={() => openScanner('code_barre')}
-                >
-                  <QrCode size={20} color={COLORS.primary} />
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setUnitModalVisible(true)}
-              >
-                <Text
-                  style={
-                    form.unite_product ? styles.selectText : styles.selectPlaceholder
-                  }
-                >
-                  {form.unite_product || 'Unité'}
-                </Text>
-              </TouchableOpacity>
-
               <View style={styles.sheetActions}>
                 <TouchableOpacity
                   style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={() => bottomSheetRef.current?.close()}
+                  onPress={() => setCategoryModalVisible(false)}
                 >
                   <Text style={styles.sheetButtonGhostText}>Annuler</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetButton} onPress={saveProduct}>
-                  <Text style={styles.sheetButtonText}>
-                    {editMode === 'add' ? 'Ajouter' : 'Enregistrer'}
-                  </Text>
+                <TouchableOpacity
+                  style={styles.sheetButton}
+                  onPress={createCategory}
+                  disabled={creatingCategory}
+                >
+                  {creatingCategory ? (
+                    <ActivityIndicator color={COLORS.white} />
+                  ) : (
+                    <Text style={styles.sheetButtonText}>Créer</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
-        </Modalize>
-
-        {/* BOTTOM SHEET FILTRES */}
-        <Modalize ref={filterSheetRef} adjustToContentHeight>
-          <View style={styles.sheetContent}>
-            <Text style={styles.sheetTitle}>Filtrer les produits</Text>
-
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="Nom du produit"
-              value={filterForm.nom}
-              onChangeText={(value) =>
-                setFilterForm((prev) => ({ ...prev, nom: value }))
-              }
-              placeholderTextColor={COLORS.muted}
-            />
-
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="Code barre"
-              value={filterForm.code_barre}
-              onChangeText={(value) =>
-                setFilterForm((prev) => ({ ...prev, code_barre: value }))
-              }
-              placeholderTextColor={COLORS.muted}
-            />
-
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="ID produit"
-              value={filterForm.id_product}
-              onChangeText={(value) =>
-                setFilterForm((prev) => ({ ...prev, id_product: value }))
-              }
-              placeholderTextColor={COLORS.muted}
-              keyboardType="numeric"
-            />
-
-            <TouchableOpacity
-              style={styles.selectButton}
-              onPress={() => setFilterCategoryModalVisible(true)}
-            >
-              <Text
-                style={
-                  filterForm.id_category
-                    ? styles.selectText
-                    : styles.selectPlaceholder
-                }
-              >
-                {filterForm.id_category
-                  ? categoriesList.find((c) => c.id === filterForm.id_category)
-                    ?.name || 'Catégorie'
-                  : 'Catégorie'}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.sheetActions}>
-              <TouchableOpacity
-                style={[styles.sheetButton, styles.sheetButtonGhost]}
-                onPress={resetFilters}
-              >
-                <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
-                <Text style={styles.sheetButtonText}>Appliquer</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </Modalize>
+        </RNModal>
       </View>
     </KeyboardAvoidingView>
   )
@@ -1200,6 +1619,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   loadingText: { color: COLORS.muted, fontWeight: '600' },
+  switchContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 12,
+  },
+  switchBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  switchActive: {
+    backgroundColor: COLORS.primary,
+  },
+  switchText: {
+    color: COLORS.muted,
+    fontWeight: '600',
+  },
+  switchTextActive: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
   addButton: {
     flexDirection: 'row',
     gap: 6,
@@ -1242,6 +1685,29 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     backgroundColor: COLORS.bg,
   },
+  cardImageWrapper: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  typeBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: '#fff',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderTopLeftRadius: 12,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderRightWidth: 0,
+    borderColor: '#cdcde6'
+  },
+
+  typeBadgeText: {
+    color: '#00000000',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   statusBadge: {
     flexDirection: 'row',
     gap: 6,
@@ -1277,18 +1743,18 @@ const styles = StyleSheet.create({
     elevation: 2,
     backgroundColor: COLORS.primary,
   },
-    gap: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    backgroundColor: COLORS.primary,
+  gap: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 14,
+  shadowColor: COLORS.black,
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.1,
+  shadowRadius: 2,
+  elevation: 2,
+  backgroundColor: COLORS.primary,
   actionBtn: {
     flexDirection: 'row',
     gap: 10,
@@ -1316,14 +1782,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyStateText: { color: COLORS.muted, fontWeight: '600' },
-  loadMore: {
-    marginTop: 16,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  loadMoreText: { color: COLORS.white, fontWeight: '700' },
   modalCard: {
     backgroundColor: COLORS.card,
     borderRadius: 18,
@@ -1448,6 +1906,100 @@ const styles = StyleSheet.create({
   },
   selectText: { color: COLORS.text, fontSize: 15, fontWeight: '500' },
   selectPlaceholder: { color: COLORS.muted, fontSize: 15 },
+  dropdownRow: {
+    marginBottom: 12,
+  },
+  dropdownRowWithAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  dropdown: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+  },
+  dropdownFlex: {
+    flex: 1,
+  },
+  dropdownPlaceholder: {
+    color: COLORS.muted,
+    fontSize: 15,
+  },
+  dropdownSelected: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  dropdownSearchInput: {
+    height: 40,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  dropdownContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  dropdownItemText: {
+    color: COLORS.text,
+    fontSize: 14,
+  },
+  addCategoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    flex: 1,
+  },
+  addCategoryText: {
+    color: COLORS.white,
+    marginLeft: 5,
+    fontWeight: '600',
+  },
+  addCategoryBtnEmpty: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  emptyCategoryBox: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 12,
+  },
+  emptyCategoryTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyCategoryText: {
+    color: COLORS.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryModal: {
+    width: '85%',
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 20,
+  },
   sheetActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',

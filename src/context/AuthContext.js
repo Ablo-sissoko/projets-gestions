@@ -29,7 +29,14 @@ export const AuthProvider = ({ children }) => {
       const storedToken = await SecureStore.getItemAsync('token')
       const storedUser = await SecureStore.getItemAsync('user')
       if (storedToken) setToken(storedToken)
-      if (storedUser) setUser(JSON.parse(storedUser))
+      if (storedUser) {
+        let u = JSON.parse(storedUser)
+        if (u?.categoryIdBoutique != null && u.category_id == null) {
+          u = { ...u, category_id: u.categoryIdBoutique }
+          await SecureStore.setItemAsync('user', JSON.stringify(u))
+        }
+        setUser(u)
+      }
     } catch (e) {
       setToken(null)
       setUser(null)

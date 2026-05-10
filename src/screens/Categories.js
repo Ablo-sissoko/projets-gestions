@@ -363,7 +363,7 @@ const Categories = () => {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.pageHeader}>
-            <View>
+    <View>
               <Text style={styles.title}>Catégories</Text>
               <Text style={styles.subtitle}>Produits & dépenses</Text>
             </View>
@@ -508,7 +508,7 @@ const Categories = () => {
             </View>
           </View>
         </Modalize>
-      </View>
+    </View>
     </KeyboardAvoidingView>
   )
 }

@@ -465,7 +465,7 @@ export default function ProfileScreen() {
             </View>
           </View>
         </Modalize>
-      </View>
+    </View>
     </KeyboardAvoidingView>
   )
 }

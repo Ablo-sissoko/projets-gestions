@@ -50,6 +50,7 @@ const FournisseursScreen = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [editMode, setEditMode] = useState('add')
   const [viewFournisseur, setViewFournisseur] = useState(null)
+  
   const [form, setForm] = useState({
     nom_entreprise: '',
     email: '',
@@ -58,6 +59,7 @@ const FournisseursScreen = () => {
     adresse: '',
     status: '1',
   })
+
   const sheetRef = useRef(null)
 
   useEffect(() => {
@@ -300,7 +302,7 @@ const FournisseursScreen = () => {
 
           {/* ===== Title ===== */}
           <View style={styles.headerRow}>
-            <View>
+    <View>
               <Text style={styles.title}>Fournisseurs</Text>
               <Text style={styles.subtitle}>
                 Gestion & suivi des partenaires
@@ -433,7 +435,7 @@ const FournisseursScreen = () => {
             </TouchableOpacity>
           </View>
         </Modal>
-      </View>
+    </View>
     </KeyboardAvoidingView>
   )
 }

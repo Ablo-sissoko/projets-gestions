@@ -480,7 +480,7 @@ export default function ProformaDevisScreen() {
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <View style={styles.productApiCard}>
-                    <View>
+    <View>
                       <Text style={styles.productName}>{item.name}</Text>
                       <Text style={styles.productPrice}>
                         {item.price.toLocaleString()} FCFA
@@ -583,7 +583,7 @@ export default function ProformaDevisScreen() {
             </View>
           </View>
         </RNModal>
-      </View>
+    </View>
     </KeyboardAvoidingView>
   )
 }
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
   previewLoading: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center',   
   },
   previewLoadingText: { color: COLORS.text },
   previewButton: {
