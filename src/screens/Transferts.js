@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
 } from "react-native"
 import Modal from "react-native-modal"
-import { Modalize } from "react-native-modalize"
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from "@gorhom/bottom-sheet"
 import DateTimePicker from "@react-native-community/datetimepicker"
 import {
   Plus,
@@ -106,6 +106,22 @@ export default function TransfertsScreen() {
 
   const bottomSheetRef = useRef(null)
   const filterSheetRef = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ["60%"], [])
+  const filterSnapPoints = useMemo(() => ["60%"], [])
+
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   const fetchComptes = async () => {
     const entreprise_id = user?.entreprise_id
@@ -254,7 +270,7 @@ export default function TransfertsScreen() {
       montant: "",
       commentaire: "",
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.expand()
   }
 
   const openEdit = (transfert) => {
@@ -268,11 +284,11 @@ export default function TransfertsScreen() {
       commentaire: transfert.commentaire || "",
       createdAt: transfert.createdAt,
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.expand()
   }
 
   const openFilters = () => {
-    filterSheetRef.current?.open()
+    filterSheetRef.current?.expand()
   }
 
   const saveTransfert = async () => {
@@ -447,11 +463,11 @@ export default function TransfertsScreen() {
 
   return (
     <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-  >
-    <View style={styles.wrapper}>
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      <View style={styles.wrapper}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <Header agentName="Agent connecté" />
 
@@ -604,41 +620,146 @@ export default function TransfertsScreen() {
       )}
 
       {/* Bottom Sheet Ajout/Modification */}
-      <Modalize
+      <BottomSheet
         ref={bottomSheetRef}
-        adjustToContentHeight
-        scrollViewProps={{
-          showsVerticalScrollIndicator: false,
-          keyboardShouldPersistTaps: "handled",
-        }}
-        modalStyle={styles.modalize}
-        handleStyle={styles.handle}
-        overlayStyle={styles.overlay}
-        withHandle
-        panGestureEnabled
-        closeOnOverlayTap
+        index={-1}
+        snapPoints={sheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={renderSheetBackdrop}
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.sheetScrollContent}
-        >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>
-            {editMode === "add" ? "Nouveau transfert" : "Modifier le transfert"}
-          </Text>
+          renderItem={() => null}
+          ListHeaderComponent={
+            <View style={styles.sheetContent}>
+              <Text style={styles.sheetTitle}>
+                {editMode === "add" ? "Nouveau transfert" : "Modifier le transfert"}
+              </Text>
 
-          {editMode === "add" ? (
-            <>
+              {editMode === "add" ? (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Du Compte</Text>
+                    <TouchableOpacity
+                      style={styles.selectButton}
+                      onPress={() => setShowFromModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={!form.from ? styles.selectPlaceholder : styles.selectText}>
+                        {form.from || "Sélectionner un compte source"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Au Compte</Text>
+                    <TouchableOpacity
+                      style={styles.selectButton}
+                      onPress={() => setShowToModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={!form.to ? styles.selectPlaceholder : styles.selectText}>
+                        {form.to || "Sélectionner un compte destination"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Commentaire</Text>
+                    <TextInput
+                      style={[styles.sheetInput, styles.textArea]}
+                      placeholder="Commentaire"
+                      value={form.commentaire}
+                      onChangeText={(value) =>
+                        setForm((p) => ({ ...p, commentaire: value }))
+                      }
+                      multiline
+                      numberOfLines={3}
+                      placeholderTextColor={COLORS.muted}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                </>
+              ) : null}
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Date</Text>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Calendar size={18} color={COLORS.muted} />
+                  <Text style={styles.dateButtonText}>
+                    {form.date || "Sélectionner une date"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Montant</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Montant"
+                  value={form.montant}
+                  onChangeText={(value) =>
+                    setForm((p) => ({ ...p, montant: value }))
+                  }
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.muted}
+                />
+              </View>
+
+              <View style={styles.sheetActions}>
+                <TouchableOpacity
+                  style={[styles.sheetButton, styles.sheetButtonGhost]}
+                  onPress={() => bottomSheetRef.current?.close()}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sheetButtonGhostText}>Fermer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.sheetButton}
+                  onPress={saveTransfert}
+                  disabled={editMode === "add" ? (!form.from || !form.to || !form.montant) : !form.montant}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sheetButtonText}>Enregistrer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+        />
+      </BottomSheet>
+
+      {/* Bottom Sheet Filtres */}
+      <BottomSheet
+        ref={filterSheetRef}
+        index={-1}
+        snapPoints={filterSnapPoints}
+        enablePanDownToClose
+        backdropComponent={renderSheetBackdrop}
+      >
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
+          keyboardShouldPersistTaps="handled"
+          renderItem={() => null}
+          ListHeaderComponent={
+            <View style={styles.sheetContent}>
+              <Text style={styles.sheetTitle}>Filtrer les transferts</Text>
+
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Du Compte</Text>
                 <TouchableOpacity
                   style={styles.selectButton}
-                  onPress={() => setShowFromModal(true)}
+                  onPress={() => setShowFilterFromModal(true)}
                   activeOpacity={0.7}
                 >
-                  <Text style={!form.from ? styles.selectPlaceholder : styles.selectText}>
-                    {form.from || "Sélectionner un compte source"}
+                  <Text style={!filterForm.from ? styles.selectPlaceholder : styles.selectText}>
+                    {filterForm.from || "Tous les comptes sources"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -647,176 +768,67 @@ export default function TransfertsScreen() {
                 <Text style={styles.formLabel}>Au Compte</Text>
                 <TouchableOpacity
                   style={styles.selectButton}
-                  onPress={() => setShowToModal(true)}
+                  onPress={() => setShowFilterToModal(true)}
                   activeOpacity={0.7}
                 >
-                  <Text style={!form.to ? styles.selectPlaceholder : styles.selectText}>
-                    {form.to || "Sélectionner un compte destination"}
+                  <Text style={!filterForm.to ? styles.selectPlaceholder : styles.selectText}>
+                    {filterForm.to || "Tous les comptes destinations"}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Commentaire</Text>
-                <TextInput
-                  style={[styles.sheetInput, styles.textArea]}
-                  placeholder="Commentaire"
-                  value={form.commentaire}
-                  onChangeText={(value) =>
-                    setForm((p) => ({ ...p, commentaire: value }))
-                  }
-                  multiline
-                  numberOfLines={3}
-                  placeholderTextColor={COLORS.muted}
-                  textAlignVertical="top"
-                />
+                <Text style={styles.formLabel}>Date début</Text>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowFilterDateDebutPicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Calendar size={18} color={COLORS.muted} />
+                  <Text style={styles.dateButtonText}>
+                    {filterForm.dateDebut || "Sélectionner"}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </>
-          ) : null}
 
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Date</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-              activeOpacity={0.7}
-            >
-              <Calendar size={18} color={COLORS.muted} />
-              <Text style={styles.dateButtonText}>
-                {form.date || "Sélectionner une date"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Date fin</Text>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowFilterDateFinPicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Calendar size={18} color={COLORS.muted} />
+                  <Text style={styles.dateButtonText}>
+                    {filterForm.dateFin || "Sélectionner"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Montant</Text>
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="Montant"
-              value={form.montant}
-              onChangeText={(value) =>
-                setForm((p) => ({ ...p, montant: value }))
-              }
-              keyboardType="numeric"
-              placeholderTextColor={COLORS.muted}
-            />
-          </View>
-
-          <View style={styles.sheetActions}>
-            <TouchableOpacity
-              style={[styles.sheetButton, styles.sheetButtonGhost]}
-              onPress={() => bottomSheetRef.current?.close()}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sheetButtonGhostText}>Fermer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sheetButton}
-              onPress={saveTransfert}
-              disabled={editMode === "add" ? (!form.from || !form.to || !form.montant) : !form.montant}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sheetButtonText}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        </ScrollView>
-      </Modalize>
-
-      {/* Bottom Sheet Filtres */}
-      <Modalize
-        ref={filterSheetRef}
-        adjustToContentHeight
-        modalStyle={styles.modalize}
-        handleStyle={styles.handle}
-        overlayStyle={styles.overlay}
-        withHandle
-        panGestureEnabled
-        closeOnOverlayTap
-        scrollViewProps={{
-          keyboardShouldPersistTaps: 'handled',
-          showsVerticalScrollIndicator: false
-        }}
-      >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>Filtrer les transferts</Text>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Du Compte</Text>
-            <TouchableOpacity
-              style={styles.selectButton}
-              onPress={() => setShowFilterFromModal(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={!filterForm.from ? styles.selectPlaceholder : styles.selectText}>
-                {filterForm.from || "Tous les comptes sources"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Au Compte</Text>
-            <TouchableOpacity
-              style={styles.selectButton}
-              onPress={() => setShowFilterToModal(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={!filterForm.to ? styles.selectPlaceholder : styles.selectText}>
-                {filterForm.to || "Tous les comptes destinations"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Date début</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowFilterDateDebutPicker(true)}
-              activeOpacity={0.7}
-            >
-              <Calendar size={18} color={COLORS.muted} />
-              <Text style={styles.dateButtonText}>
-                {filterForm.dateDebut || "Sélectionner"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Date fin</Text>
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowFilterDateFinPicker(true)}
-              activeOpacity={0.7}
-            >
-              <Calendar size={18} color={COLORS.muted} />
-              <Text style={styles.dateButtonText}>
-                {filterForm.dateFin || "Sélectionner"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.sheetActions}>
-            <TouchableOpacity
-              style={[styles.sheetButton, styles.sheetButtonGhost]}
-              onPress={() => {
-                resetFilters()
-                filterSheetRef.current?.close()
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sheetButtonGhostText}>Fermer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sheetButton, styles.sheetButtonPrimary]}
-              onPress={applyFilters}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sheetButtonText}>Appliquer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modalize>
-    </View>
+              <View style={styles.sheetActions}>
+                <TouchableOpacity
+                  style={[styles.sheetButton, styles.sheetButtonGhost]}
+                  onPress={() => {
+                    resetFilters()
+                    filterSheetRef.current?.close()
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sheetButtonGhostText}>Fermer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sheetButton, styles.sheetButtonPrimary]}
+                  onPress={applyFilters}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sheetButtonText}>Appliquer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+        />
+      </BottomSheet>
+      </View>
     </KeyboardAvoidingView>
   )
 }
@@ -1022,26 +1034,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  // Styles Modalize
-  modalize: {
-    backgroundColor: COLORS.card,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+  // Bottom sheet (gorhom) — même logique que Depenses.js
+  sheetContent: {
+    padding: 20,
+    gap: 16,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
   },
-  handle: {
-    width: 60,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.border,
-    marginTop: 10,
-  },
-  overlay: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  sheetScrollContent: {
-    paddingBottom: 24,
-  },
-  sheetContent: { padding: 20, gap: 16 },
   sheetTitle: { fontSize: 18, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
   formGroup: { gap: 8 },
   formLabel: { fontSize: 14, fontWeight: "600", color: COLORS.text },

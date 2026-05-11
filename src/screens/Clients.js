@@ -15,12 +15,7 @@ import {
 } from 'react-native'
 import Toast from 'react-native-toast-message'
 import Modal from 'react-native-modal'
-import {
-  BottomSheetBackdrop,
-  BottomSheetFlatList,
-  BottomSheetModal,
-  BottomSheetModalProvider,
-} from '@gorhom/bottom-sheet'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import {
   Filter,
   Plus,
@@ -109,9 +104,24 @@ const Clients = () => {
     status: '',
     user_id: '',
   })
+  
   const bottomSheetRef = useRef(null)
   const filterSheetRef = useRef(null)
-  const sheetSnapPoints = useMemo(() => ['75%'], [])
+  const sheetSnapPoints = useMemo(() => ['60%'], [])
+  const filterSnapPoints = useMemo(() => ['60%'], [])
+  
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   useEffect(() => {
     refreshClients(1, false)
@@ -198,15 +208,13 @@ const Clients = () => {
     }
   }
 
-
-
   const handleLoadMore = () => {
     if (loadingMore || currentPage >= totalPages) return
     refreshClients(currentPage + 1, true)
   }
 
   const openFilters = () => {
-    filterSheetRef.current?.present()
+    filterSheetRef.current?.expand()
   }
 
   const resetFilters = () => {
@@ -217,12 +225,12 @@ const Clients = () => {
       status: '',
     })
     setFilter('all')
-    filterSheetRef.current?.dismiss()
+    filterSheetRef.current?.close()
     refreshClients(1, false)
   }
 
   const applyFilters = () => {
-    filterSheetRef.current?.dismiss()
+    filterSheetRef.current?.close()
     refreshClients(1, false)
   }
 
@@ -283,6 +291,7 @@ const Clients = () => {
       </Modal>
     )
   }
+  
   const refreshAll = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -310,7 +319,7 @@ const Clients = () => {
       status: '',
       user_id: '',
     })
-    bottomSheetRef.current?.present()
+    bottomSheetRef.current?.expand()
   }
 
   const openEdit = (client) => {
@@ -325,7 +334,7 @@ const Clients = () => {
       status: String(client.statusValue ?? '1'),
       user_id: '',
     })
-    bottomSheetRef.current?.present()
+    bottomSheetRef.current?.expand()
   }
 
   const saveClient = async () => {
@@ -375,7 +384,7 @@ const Clients = () => {
         })
       }
 
-      bottomSheetRef.current?.dismiss()
+      bottomSheetRef.current?.close()
       refreshClients(1, false)
     } catch (error) {
       Toast.show({
@@ -388,7 +397,7 @@ const Clients = () => {
 
   const StatusBadge = ({ status }) => {
     const isActive = status === 'Activé'
-  return (
+    return (
       <View
         style={[
           styles.statusBadge,
@@ -432,7 +441,6 @@ const Clients = () => {
       </View>
     </View>
   )
-
 
   const ListFooter = () => {
     if (clients.length === 0 && !initialLoading) {
@@ -479,7 +487,6 @@ const Clients = () => {
   }
 
   return (
-    <BottomSheetModalProvider>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -576,15 +583,14 @@ const Clients = () => {
           },
           onClose: () => setShowFilterStatusPicker(false),
         })}
+        
         {/* Bottom Sheet Ajout/Modification */}
-        <BottomSheetModal
+        <BottomSheet
           ref={bottomSheetRef}
-          index={0}
+          index={-1}
           snapPoints={sheetSnapPoints}
           enablePanDownToClose
-          backdropComponent={(props) => (
-            <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-          )}
+          backdropComponent={renderSheetBackdrop}
         >
           <BottomSheetFlatList
             data={[]}
@@ -593,101 +599,99 @@ const Clients = () => {
             renderItem={() => null}
             ListHeaderComponent={
               <View style={styles.sheetContent}>
-              <Text style={styles.sheetTitle}>
-                {editMode === 'add' ? 'Ajouter un client' : 'Modifier le client'}
-              </Text>
+                <Text style={styles.sheetTitle}>
+                  {editMode === 'add' ? 'Ajouter un client' : 'Modifier le client'}
+                </Text>
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Nom de l'entreprise"
-                value={form.nom_entreprise}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, nom_entreprise: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom de l'entreprise"
+                  value={form.nom_entreprise}
+                  onChangeText={(value) =>
+                    setForm((prev) => ({ ...prev, nom_entreprise: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Nom du client *"
-                value={form.nom_customer}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, nom_customer: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom du client *"
+                  value={form.nom_customer}
+                  onChangeText={(value) =>
+                    setForm((prev) => ({ ...prev, nom_customer: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Email"
-                value={form.email}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, email: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Email"
+                  value={form.email}
+                  onChangeText={(value) =>
+                    setForm((prev) => ({ ...prev, email: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Téléphone"
-                value={form.telephone}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, telephone: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-                keyboardType="phone-pad"
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Téléphone"
+                  value={form.telephone}
+                  onChangeText={(value) =>
+                    setForm((prev) => ({ ...prev, telephone: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                  keyboardType="phone-pad"
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Adresse"
-                value={form.adresse}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, adresse: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Adresse"
+                  value={form.adresse}
+                  onChangeText={(value) =>
+                    setForm((prev) => ({ ...prev, adresse: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
 
-              {editMode === 'edit' && (
-                <TouchableOpacity
-                  style={[styles.sheetInput, styles.selectButton]}
-                  onPress={() => setShowStatusPicker(true)}
-                >
-                  <Text style={form.status ? styles.selectText : styles.selectPlaceholder}>
-                    {getStatusLabel(form.status) || 'Sélectionner un statut'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {editMode === 'edit' && (
+                  <TouchableOpacity
+                    style={[styles.sheetInput, styles.selectButton]}
+                    onPress={() => setShowStatusPicker(true)}
+                  >
+                    <Text style={form.status ? styles.selectText : styles.selectPlaceholder}>
+                      {getStatusLabel(form.status) || 'Sélectionner un statut'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              <View style={styles.sheetActions}>
-                <TouchableOpacity
-                  style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={() => bottomSheetRef.current?.dismiss()}
-                >
-                  <Text style={styles.sheetButtonGhostText}>Annuler</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetButton} onPress={saveClient}>
-                  <Text style={styles.sheetButtonText}>
-                    {editMode === 'add' ? 'Ajouter' : 'Modifier'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={() => bottomSheetRef.current?.close()}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={saveClient}>
+                    <Text style={styles.sheetButtonText}>
+                      {editMode === 'add' ? 'Ajouter' : 'Modifier'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             }
           />
-        </BottomSheetModal>
+        </BottomSheet>
 
         {/* Bottom Sheet Filtres */}
-        <BottomSheetModal
+        <BottomSheet
           ref={filterSheetRef}
-          index={0}
-          snapPoints={sheetSnapPoints}
+          index={-1}
+          snapPoints={filterSnapPoints}
           enablePanDownToClose
-          backdropComponent={(props) => (
-            <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} />
-          )}
+          backdropComponent={renderSheetBackdrop}
         >
           <BottomSheetFlatList
             data={[]}
@@ -696,66 +700,65 @@ const Clients = () => {
             renderItem={() => null}
             ListHeaderComponent={
               <View style={styles.sheetContent}>
-              <Text style={styles.sheetTitle}>Filtrer les clients</Text>
+                <Text style={styles.sheetTitle}>Filtrer les clients</Text>
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Nom du client"
-                value={filterForm.nom_customer}
-                onChangeText={(value) =>
-                  setFilterForm((prev) => ({ ...prev, nom_customer: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom du client"
+                  value={filterForm.nom_customer}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, nom_customer: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Nom de l'entreprise"
-                value={filterForm.nom_entreprise}
-                onChangeText={(value) =>
-                  setFilterForm((prev) => ({ ...prev, nom_entreprise: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom de l'entreprise"
+                  value={filterForm.nom_entreprise}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, nom_entreprise: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                />
 
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Téléphone"
-                value={filterForm.telephone}
-                onChangeText={(value) =>
-                  setFilterForm((prev) => ({ ...prev, telephone: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-                keyboardType="phone-pad"
-              />
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Téléphone"
+                  value={filterForm.telephone}
+                  onChangeText={(value) =>
+                    setFilterForm((prev) => ({ ...prev, telephone: value }))
+                  }
+                  placeholderTextColor={COLORS.muted}
+                  keyboardType="phone-pad"
+                />
 
-              <TouchableOpacity
-                style={[styles.sheetInput, styles.selectButton]}
-                onPress={() => setShowFilterStatusPicker(true)}
-              >
-                <Text style={filterForm.status ? styles.selectText : styles.selectPlaceholder}>
-                  {getStatusLabel(filterForm.status, true) || 'Tous les statuts'}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.sheetActions}>
                 <TouchableOpacity
-                  style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={resetFilters}
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowFilterStatusPicker(true)}
                 >
-                  <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
+                  <Text style={filterForm.status ? styles.selectText : styles.selectPlaceholder}>
+                    {getStatusLabel(filterForm.status, true) || 'Tous les statuts'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
-                  <Text style={styles.sheetButtonText}>Appliquer</Text>
-                </TouchableOpacity>
-              </View>
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={resetFilters}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
+                    <Text style={styles.sheetButtonText}>Appliquer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             }
           />
-        </BottomSheetModal>
+        </BottomSheet>
       </View>
     </KeyboardAvoidingView>
-    </BottomSheetModalProvider>
   )
 }
 

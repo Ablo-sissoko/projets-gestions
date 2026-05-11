@@ -45,6 +45,7 @@ export default function SignatureEntreprise() {
   const [entrepriseId, setEntrepriseId] = useState(null);
   const [signatureUri, setSignatureUri] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [progress, setProgress] = useState(0);
 
   const syncSignatureFromUser = useCallback(() => {
@@ -259,17 +260,65 @@ export default function SignatureEntreprise() {
 
   const clearSignature = async () => {
     if (!user) return;
-    const updatedUser = { ...user };
-    delete updatedUser.signatureBoutique;
-    delete updatedUser.signatureUrl;
-    await SecureStore.setItemAsync("user", JSON.stringify(updatedUser));
-    setUser(updatedUser);
-    setSignatureUri(null);
-    Toast.show({
-      type: "success",
-      text1: "Signature",
-      text2: "Supprimée de ce profil",
-    });
+    const id = String(entrepriseId ?? user?.entreprise_id ?? "");
+    if (!id) {
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: "Session expirée ou entreprise inconnue",
+      });
+      return;
+    }
+
+    setRemoving(true);
+    try {
+      const response = await api.delete(
+        `/sellprox/entreprise/signature/delete/${id}`
+      );
+      const data = response.data;
+      const failed =
+        data &&
+        typeof data === "object" &&
+        (data.status === 0 ||
+          data.status === "0" ||
+          data.success === false);
+      if (failed) {
+        throw new Error(
+          data?.msg || data?.message || "Suppression refusée par le serveur"
+        );
+      }
+
+      const updatedUser = { ...user };
+      delete updatedUser.signatureBoutique;
+      delete updatedUser.signatureUrl;
+      delete updatedUser.signature_url;
+      if (typeof updatedUser.signature === "string") {
+        delete updatedUser.signature;
+      }
+
+      await SecureStore.setItemAsync("user", JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setSignatureUri(null);
+      Toast.show({
+        type: "success",
+        text1: "Signature",
+        text2:
+          data?.msg || data?.message || "Signature supprimée sur le serveur",
+      });
+    } catch (error) {
+      const msg =
+        error.response?.data?.msg ||
+        error.response?.data?.message ||
+        error.message ||
+        "Suppression impossible";
+      Toast.show({
+        type: "error",
+        text1: "Erreur",
+        text2: msg,
+      });
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
@@ -358,8 +407,13 @@ export default function SignatureEntreprise() {
             style={styles.removeBtn}
             onPress={clearSignature}
             activeOpacity={0.8}
+            disabled={removing}
           >
-            <Trash2 size={18} color={COLORS.danger} />
+            {removing ? (
+              <ActivityIndicator size="small" color={COLORS.danger} />
+            ) : (
+              <Trash2 size={18} color={COLORS.danger} />
+            )}
             <Text style={styles.removeText}>Supprimer la signature</Text>
           </TouchableOpacity>
         ) : null}

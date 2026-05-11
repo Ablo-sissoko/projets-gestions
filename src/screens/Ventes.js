@@ -218,16 +218,11 @@ export default function SalesScreen() {
   })
   const [receiptModalVisible, setReceiptModalVisible] = useState(false)
   const [lastSaleId, setLastSaleId] = useState(null)
-  const [fastClientName, setFastClientName] = useState('')
-  const [fastPhone, setFastPhone] = useState('')
-  const [fastCreating, setFastCreating] = useState(false)
 
   const scannerSheetRef = useRef(null)
   const receiptSheetRef = useRef(null)
-  const fastSheetRef = useRef(null)
   const scannerSnapPoints = useMemo(() => ['85%'], [])
   const receiptSnapPoints = useMemo(() => ['90%'], [])
-  const fastSnapPoints = useMemo(() => ['50%'], [])
 
 
 
@@ -624,75 +619,6 @@ export default function SalesScreen() {
     setClientModalVisible(true)
   }
 
-  const handleFastPay = () => {
-    if (!cart.length) {
-      Toast.show({
-        type: 'error',
-        text1: 'Panier vide',
-      })
-      return
-    }
-    fastSheetRef.current?.expand()
-  }
-
-  const submitFastSale = async () => {
-    try {
-      setFastCreating(true)
-      const entreprise_id = user?.entreprise_id
-      if (!entreprise_id || !user?.id) {
-        Toast.show({
-          type: 'error',
-          text1: 'Erreur',
-          text2: 'Session expirée. Veuillez vous reconnecter.',
-        })
-        return
-      }
-
-      const now = new Date()
-      const date = now.toISOString().slice(0, 19).replace('T', ' ')
-
-      const payload = {
-        entreprise_id,
-        client_name: fastClientName || 'Client rapide',
-        phone: fastPhone || '',
-        proforma_id: "1",
-        employee_id: user?.id,
-        employee_name: `${user?.prenom || ''} ${user?.nom || ''}`.trim(),
-        date,
-        items: cart.map(item => ({
-          id: Number(item.id),
-          nom: item.name,
-          prix: Number(item.price),
-          quantity: item.qty
-        }))
-      }
-
-      const response = await api.post('/sellprox/vente/encaissement/create', payload)
-      const ok = response.data?.status === 1 || response.status === 200
-
-      if (ok) {
-        Toast.show({
-          type: 'success',
-          text1: 'Vente rapide effectuée 🚀',
-        })
-        setCart([])
-        setFastClientName('')
-        setFastPhone('')
-        fastSheetRef.current?.close()
-      } else {
-        throw new Error(response.data?.msg || 'Erreur lors de la vente rapide')
-      }
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Erreur',
-        text2: error.message,
-      })
-    } finally {
-      setFastCreating(false)
-    }
-  }
-
   const finalizeSale = async () => {
     if (!selectedClient && !showClientForm) {
       Toast.show({
@@ -884,21 +810,13 @@ export default function SalesScreen() {
           </Text>
         </View>
 
-        <View style={styles.cartActionsRow}>
-          <TouchableOpacity
-            style={styles.fastPayButton}
-            onPress={handleFastPay}
-          >
-            <Text style={styles.fastPayTextSmall}>⚡ Vente rapide</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.payButton}
-            onPress={handlePay}
-            disabled={creating || !cart.length}
-          >
-            <Text style={styles.payText}>PAYER</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.payButton}
+          onPress={handlePay}
+          disabled={creating || !cart.length}
+        >
+          <Text style={styles.payText}>PAYER</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 🔥 BOTTOM SHEET SCANNER */}
@@ -1287,61 +1205,6 @@ export default function SalesScreen() {
           }
         />
       </BottomSheet>
-
-      {/* ⚡ BOTTOM SHEET VENTE RAPIDE */}
-      <BottomSheet
-        ref={fastSheetRef}
-        index={-1}
-        snapPoints={fastSnapPoints}
-        enablePanDownToClose
-      >
-        <BottomSheetFlatList
-          data={[]}
-          keyExtractor={(_, index) => String(index)}
-          renderItem={null}
-          ListHeaderComponent={
-            <View style={styles.fastContainer}>
-              <Text style={styles.fastTitle}>Vente rapide</Text>
-
-              <TextInput
-                placeholder="Nom client (optionnel)"
-                value={fastClientName}
-                onChangeText={setFastClientName}
-                style={styles.fastInput}
-                placeholderTextColor={COLORS.muted}
-              />
-
-              <TextInput
-                placeholder="Téléphone"
-                value={fastPhone}
-                onChangeText={setFastPhone}
-                style={styles.fastInput}
-                placeholderTextColor={COLORS.muted}
-                keyboardType="phone-pad"
-              />
-
-              <View style={styles.fastTotalBox}>
-                <Text style={styles.fastTotalLabel}>Total</Text>
-                <Text style={styles.fastTotalValue}>
-                  {Number(total || 0).toLocaleString()} FCFA
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.fastPayBtn}
-                onPress={submitFastSale}
-                disabled={fastCreating}
-              >
-                {fastCreating ? (
-                  <ActivityIndicator color={COLORS.white} />
-                ) : (
-                  <Text style={styles.fastPayText}>Encaisser</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          }
-        />
-      </BottomSheet>
     </View>
   )
 }
@@ -1493,11 +1356,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cartActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
   cartItems: {
     fontSize: 13,
     color: COLORS.muted,
@@ -1513,23 +1371,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     borderRadius: 14,
   },
-  fastPayButton: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-  },
   payText: {
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 14,
-  },
-  fastPayTextSmall: {
-    color: COLORS.primary,
-    fontWeight: '800',
-    fontSize: 13,
   },
   center: {
     flex: 1,
@@ -1994,53 +1839,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 16,
-  },
-  fastContainer: {
-    padding: 20,
-  },
-  fastTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 12,
-  },
-  fastInput: {
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: COLORS.text,
-    marginBottom: 12,
-    fontSize: 15,
-  },
-  fastTotalBox: {
-    backgroundColor: COLORS.bg,
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  fastTotalLabel: {
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  fastTotalValue: {
-    color: COLORS.text,
-    fontWeight: '800',
-  },
-  fastPayBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  fastPayText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 15,
   },
   receiptModal: {
     backgroundColor: COLORS.card,

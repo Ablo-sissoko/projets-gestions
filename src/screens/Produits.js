@@ -64,10 +64,10 @@ const ListHeaderComponent = React.memo(({
   return (
     <>
       <View style={styles.headerRow}>
-    <View>
+        <View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
-    </View>
+        </View>
 
         <TouchableOpacity style={styles.addButton} onPress={onAddPress}>
           <Plus size={18} color={COLORS.white} />
@@ -1149,18 +1149,7 @@ const Products = () => {
                       }
                     </View>
 
-                    <TextInput
-                      style={[styles.sheetInput, styles.textArea]}
-                      placeholder="Description"
-                      value={form.description}
-                      onChangeText={(value) =>
-                        setForm((prev) => ({ ...prev, description: value }))
-                      }
-                      placeholderTextColor={COLORS.muted}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                    />
+
 
                     <TouchableOpacity
                       style={styles.imagePickerButton}
@@ -1226,25 +1215,6 @@ const Products = () => {
                         keyboardType="numeric"
                       />
                     </View>
-
-                    <View style={styles.barcodeRow}>
-                      <TextInput
-                        style={[styles.sheetInput, { flex: 1 }]}
-                        placeholder="Code barre"
-                        value={form.code_barre}
-                        onChangeText={(value) =>
-                          setForm((prev) => ({ ...prev, code_barre: value }))
-                        }
-                        placeholderTextColor={COLORS.muted}
-                      />
-                      <TouchableOpacity
-                        style={styles.scanButton}
-                        onPress={() => openScanner('code_barre')}
-                      >
-                        <QrCode size={20} color={COLORS.primary} />
-                      </TouchableOpacity>
-                    </View>
-
                     <View style={styles.dropdownRow}>
                       <Dropdown
                         style={styles.dropdown}
@@ -1268,6 +1238,37 @@ const Products = () => {
                         }}
                       />
                     </View>
+                    <View style={styles.barcodeRow}>
+                      <TextInput
+                        style={[styles.sheetInput, { flex: 1 }]}
+                        placeholder="Code barre"
+                        value={form.code_barre}
+                        onChangeText={(value) =>
+                          setForm((prev) => ({ ...prev, code_barre: value }))
+                        }
+                        placeholderTextColor={COLORS.muted}
+                      />
+                      <TouchableOpacity
+                        style={styles.scanButton}
+                        onPress={() => openScanner('code_barre')}
+                      >
+                        <QrCode size={20} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    </View>
+
+
+                    <TextInput
+                      style={[styles.sheetInput, styles.textArea]}
+                      placeholder="Description"
+                      value={form.description}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, description: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
                   </>
                 ) : (
                   <>
@@ -1321,39 +1322,6 @@ const Products = () => {
                         />
                       )}
                     </View>
-
-                    <TextInput
-                      style={[styles.sheetInput, styles.textArea]}
-                      placeholder="Description"
-                      value={form.description}
-                      onChangeText={(value) =>
-                        setForm((prev) => ({ ...prev, description: value }))
-                      }
-                      placeholderTextColor={COLORS.muted}
-                      multiline
-                      numberOfLines={3}
-                      textAlignVertical="top"
-                    />
-
-                    <TouchableOpacity
-                      style={styles.imagePickerButton}
-                      onPress={pickProductImage}
-                    >
-                      <Text style={styles.imagePickerText}>
-                        {form.image?.uri
-                          ? 'Changer l’image (photo ou galerie)'
-                          : 'Ajouter une image (photo ou galerie)'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {form.image?.uri ? (
-                      <Image
-                        source={{ uri: form.image.uri }}
-                        style={styles.imagePreview}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-
                     <TextInput
                       style={styles.sheetInput}
                       placeholder="Prix de vente *"
@@ -1388,6 +1356,39 @@ const Products = () => {
                         }}
                       />
                     </View>
+                    <TextInput
+                      style={[styles.sheetInput, styles.textArea]}
+                      placeholder="Description"
+                      value={form.description}
+                      onChangeText={(value) =>
+                        setForm((prev) => ({ ...prev, description: value }))
+                      }
+                      placeholderTextColor={COLORS.muted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                    />
+
+                    <TouchableOpacity
+                      style={styles.imagePickerButton}
+                      onPress={pickProductImage}
+                    >
+                      <Text style={styles.imagePickerText}>
+                        {form.image?.uri
+                          ? 'Changer l’image (photo ou galerie)'
+                          : 'Ajouter une image (photo ou galerie)'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {form.image?.uri ? (
+                      <Image
+                        source={{ uri: form.image.uri }}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+
+
                   </>
                 )}
 

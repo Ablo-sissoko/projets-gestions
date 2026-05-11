@@ -11,10 +11,10 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
 } from 'react-native'
 import Modal from 'react-native-modal'
-import { Modalize } from 'react-native-modalize'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import {
   Search,
@@ -162,6 +162,22 @@ const Depenses = () => {
   const bottomSheetRef = useRef(null)
   const filterSheetRef = useRef(null)
   const searchTimeout = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ['60%'], [])
+  const filterSnapPoints = useMemo(() => ['60%'], [])
+
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   useEffect(() => {
     refreshDepenses(1, false, false)
@@ -348,7 +364,7 @@ const Depenses = () => {
   }, [filterForm])
 
   const openFilters = () => {
-    filterSheetRef.current?.open()
+    filterSheetRef.current?.expand()
   }
 
   const resetFilters = () => {
@@ -391,7 +407,7 @@ const Depenses = () => {
       date: '',
       details: '',
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.expand()
   }
 
   const openEdit = (depense) => {
@@ -405,7 +421,7 @@ const Depenses = () => {
       date: depense.date,
       details: depense.details,
     })
-    bottomSheetRef.current?.open()
+    bottomSheetRef.current?.expand()
   }
 
   const saveDepense = async () => {
@@ -550,8 +566,8 @@ const Depenses = () => {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View style={styles.wrapper}>
         <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
@@ -721,169 +737,199 @@ const Depenses = () => {
         )}
 
         {/* Bottom Sheet Ajout/Modification */}
-        <Modalize
+        <BottomSheet
           ref={bottomSheetRef}
-          modalHeight={600}
-          modalStyle={styles.modalize}
-          handleStyle={styles.handle}
-          overlayStyle={styles.overlay}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
         >
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.sheetContent}>
-              <Text style={styles.sheetTitle}>
-                {editMode === 'add' ? 'Nouvelle dépense' : 'Modifier la dépense'}
-              </Text>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowCompteModal(true)}
-              >
-                <Text style={!form.comptes_id ? styles.selectPlaceholder : styles.selectText}>
-                  {form.comptes_id
-                    ? comptesList.find(c => c.id === form.comptes_id)?.name
-                    : 'Sélectionner un compte'}
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
+                <Text style={styles.sheetTitle}>
+                  {editMode === 'add' ? 'Nouvelle dépense' : 'Modifier la dépense'}
                 </Text>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowCategorieModal(true)}
-              >
-                <Text style={!form.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
-                  {form.depenses_cat_id
-                    ? categoriesList.find(c => c.id === form.depenses_cat_id)?.name
-                    : 'Sélectionner une catégorie'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowModeReglementModal(true)}
-              >
-                <Text style={!form.mode_reglement ? styles.selectPlaceholder : styles.selectText}>
-                  {form.mode_reglement || 'Mode de règlement'}
-                </Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.sheetInput}
-                placeholder="Montant"
-                value={form.montant}
-                onChangeText={(value) => setForm(p => ({ ...p, montant: value }))}
-                keyboardType="numeric"
-                placeholderTextColor={COLORS.muted}
-              />
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={!form.date ? styles.selectPlaceholder : styles.selectText}>
-                  {form.date || 'Sélectionner une date'}
-                </Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={[styles.sheetInput, styles.textArea]}
-                placeholder="Détails"
-                value={form.details}
-                onChangeText={(value) => setForm(p => ({ ...p, details: value }))}
-                placeholderTextColor={COLORS.muted}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-
-              <View style={styles.sheetActions}>
                 <TouchableOpacity
-                  style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={() => bottomSheetRef.current?.close()}
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowCompteModal(true)}
                 >
-                  <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  <Text style={!form.comptes_id ? styles.selectPlaceholder : styles.selectText}>
+                    {form.comptes_id
+                      ? comptesList.find((c) => c.id === form.comptes_id)?.name
+                      : 'Sélectionner un compte'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetButton} onPress={saveDepense}>
-                  <Text style={styles.sheetButtonText}>Enregistrer</Text>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowCategorieModal(true)}
+                >
+                  <Text style={!form.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
+                    {form.depenses_cat_id
+                      ? categoriesList.find((c) => c.id === form.depenses_cat_id)?.name
+                      : 'Sélectionner une catégorie'}
+                  </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowModeReglementModal(true)}
+                >
+                  <Text style={!form.mode_reglement ? styles.selectPlaceholder : styles.selectText}>
+                    {form.mode_reglement || 'Mode de règlement'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Montant"
+                  value={form.montant}
+                  onChangeText={(value) => setForm((p) => ({ ...p, montant: value }))}
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.muted}
+                />
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.sheetInputWithIcon]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Calendar size={20} color={COLORS.muted} />
+                  <Text
+                    style={[
+                      styles.sheetInputIconText,
+                      !form.date ? styles.selectPlaceholder : styles.selectText,
+                    ]}
+                  >
+                    {form.date || 'Sélectionner une date'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TextInput
+                  style={[styles.sheetInput, styles.textArea]}
+                  placeholder="Détails"
+                  value={form.details}
+                  onChangeText={(value) => setForm((p) => ({ ...p, details: value }))}
+                  placeholderTextColor={COLORS.muted}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={() => bottomSheetRef.current?.close()}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={saveDepense}>
+                    <Text style={styles.sheetButtonText}>Enregistrer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-        </Modalize>
+            }
+          />
+        </BottomSheet>
 
         {/* Bottom Sheet Filtres */}
-        <Modalize
+        <BottomSheet
           ref={filterSheetRef}
-          adjustToContentHeight
-          modalStyle={styles.modalize}
-          handleStyle={styles.handle}
-          overlayStyle={styles.overlay}
+          index={-1}
+          snapPoints={filterSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
         >
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.sheetContent}>
-              <Text style={styles.sheetTitle}>Filtrer les dépenses</Text>
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={styles.sheetContent}>
+                <Text style={styles.sheetTitle}>Filtrer les dépenses</Text>
 
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowFilterCompteModal(true)}
-              >
-                <Text style={!filterForm.comptes_id ? styles.selectPlaceholder : styles.selectText}>
-                  {filterForm.comptes_id
-                    ? comptesList.find(c => c.id === filterForm.comptes_id)?.name
-                    : 'Tous les comptes'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowFilterCategorieModal(true)}
-              >
-                <Text style={!filterForm.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
-                  {filterForm.depenses_cat_id
-                    ? categoriesList.find(c => c.id === filterForm.depenses_cat_id)?.name
-                    : 'Toutes les catégories'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowFilterModeReglementModal(true)}
-              >
-                <Text style={!filterForm.mode_reglement ? styles.selectPlaceholder : styles.selectText}>
-                  {filterForm.mode_reglement || 'Tous les modes'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowFilterDateDepartPicker(true)}
-              >
-                <Text style={!filterForm.dateDepart ? styles.selectPlaceholder : styles.selectText}>
-                  {filterForm.dateDepart || 'Date début'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowFilterDateFinPicker(true)}
-              >
-                <Text style={!filterForm.dateFin ? styles.selectPlaceholder : styles.selectText}>
-                  {filterForm.dateFin || 'Date fin'}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.sheetActions}>
                 <TouchableOpacity
-                  style={[styles.sheetButton, styles.sheetButtonGhost]}
-                  onPress={resetFilters}
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowFilterCompteModal(true)}
                 >
-                  <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
+                  <Text style={!filterForm.comptes_id ? styles.selectPlaceholder : styles.selectText}>
+                    {filterForm.comptes_id
+                      ? comptesList.find((c) => c.id === filterForm.comptes_id)?.name
+                      : 'Tous les comptes'}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
-                  <Text style={styles.sheetButtonText}>Appliquer</Text>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowFilterCategorieModal(true)}
+                >
+                  <Text style={!filterForm.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
+                    {filterForm.depenses_cat_id
+                      ? categoriesList.find((c) => c.id === filterForm.depenses_cat_id)?.name
+                      : 'Toutes les catégories'}
+                  </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.selectButton]}
+                  onPress={() => setShowFilterModeReglementModal(true)}
+                >
+                  <Text style={!filterForm.mode_reglement ? styles.selectPlaceholder : styles.selectText}>
+                    {filterForm.mode_reglement || 'Tous les modes'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.sheetInputWithIcon]}
+                  onPress={() => setShowFilterDateDepartPicker(true)}
+                >
+                  <Calendar size={20} color={COLORS.muted} />
+                  <Text
+                    style={[
+                      styles.sheetInputIconText,
+                      !filterForm.dateDepart ? styles.selectPlaceholder : styles.selectText,
+                    ]}
+                  >
+                    {filterForm.dateDepart || 'Date début'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sheetInput, styles.sheetInputWithIcon]}
+                  onPress={() => setShowFilterDateFinPicker(true)}
+                >
+                  <Calendar size={20} color={COLORS.muted} />
+                  <Text
+                    style={[
+                      styles.sheetInputIconText,
+                      !filterForm.dateFin ? styles.selectPlaceholder : styles.selectText,
+                    ]}
+                  >
+                    {filterForm.dateFin || 'Date fin'}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={resetFilters}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Réinitialiser</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={applyFilters}>
+                    <Text style={styles.sheetButtonText}>Appliquer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-        </Modalize>
+            }
+          />
+        </BottomSheet>
       </View>
     </KeyboardAvoidingView>
   )
@@ -1076,31 +1122,43 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  // Styles du bottom sheet
-  sheetContent: { padding: 20, gap: 12 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text, marginBottom: 8 },
-  selectButton: {
-    backgroundColor: COLORS.bg,
+  // Styles du bottom sheet (alignés sur Clients.js)
+  sheetContent: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 16,
+  },
+  sheetInput: {
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginBottom: 8,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 12,
+    color: COLORS.text,
+    marginBottom: 12,
+    fontSize: 15,
+    minHeight: 48,
+  },
+  selectButton: {
+    justifyContent: 'center',
+  },
+  sheetInputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sheetInputIconText: {
+    flex: 1,
+    fontSize: 15,
   },
   selectText: { color: COLORS.text, fontSize: 15, fontWeight: '500' },
   selectPlaceholder: { color: COLORS.muted, fontSize: 15 },
-  sheetInput: {
-    backgroundColor: COLORS.bg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: COLORS.text,
-    marginBottom: 8,
-    fontSize: 15,
-  },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   sheetActions: {
     flexDirection: 'row',
@@ -1122,23 +1180,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   sheetButtonGhostText: { color: COLORS.text, fontWeight: '700', fontSize: 15 },
-
-  // Styles Modalize
-  modalize: {
-    backgroundColor: COLORS.card,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-  },
-  handle: {
-    width: 60,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.border,
-
-  },
-  overlay: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
 })
 
 export default Depenses
