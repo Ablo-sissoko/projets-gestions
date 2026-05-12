@@ -35,7 +35,7 @@ export default function App() {
   return (
     <AuthProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <StatusBar style="#e46c35" />
+        <StatusBar style="auto" />
         <SafeAreaView style={{ flex: 1 }}>
           <NavigationContainer ref={navigationRef}>
             <Stack.Navigator>
