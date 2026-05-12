@@ -36,43 +36,7 @@ import api from '../api/Axios'
 import LoadingScreen from '../componants/LoadingScreen'
 import Toast from 'react-native-toast-message'
 import COLORS from '../constants/couleurs'
-
-/* ===================== MODAL DE SÉLECTION ===================== */
-const SelectionModal = ({ visible, title, options, onSelect, onClose }) => {
-  return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onClose}
-      onBackButtonPress={onClose}
-      style={styles.selectionModal}
-      animationIn="fadeIn"
-      animationOut="fadeOut"
-    >
-      <View style={styles.selectionModalContent}>
-        <View style={styles.selectionModalHeader}>
-          <Text style={styles.selectionModalTitle}>{title}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <X size={20} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={styles.selectionModalItem}
-              onPress={() => {
-                onSelect(option)
-                onClose()
-              }}
-            >
-              <Text style={styles.selectionModalItemText}>{option.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
-  )
-}
+import { Dropdown } from 'react-native-element-dropdown'
 
 /* ===================== MODAL MODE RÈGLEMENT ===================== */
 const ModeReglementModal = ({ visible, onSelect, onClose }) => {
@@ -149,11 +113,7 @@ const Depenses = () => {
   const [categoriesList, setCategoriesList] = useState([])
 
   // États pour les modals
-  const [showCompteModal, setShowCompteModal] = useState(false)
-  const [showCategorieModal, setShowCategorieModal] = useState(false)
   const [showModeReglementModal, setShowModeReglementModal] = useState(false)
-  const [showFilterCompteModal, setShowFilterCompteModal] = useState(false)
-  const [showFilterCategorieModal, setShowFilterCategorieModal] = useState(false)
   const [showFilterModeReglementModal, setShowFilterModeReglementModal] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showFilterDateDepartPicker, setShowFilterDateDepartPicker] = useState(false)
@@ -645,43 +605,10 @@ const Depenses = () => {
           </View>
         </Modal>
 
-        {/* Modals de sélection */}
-        <SelectionModal
-          visible={showCompteModal}
-          title="Sélectionner un compte"
-          options={comptesList}
-          onSelect={(option) => setForm(prev => ({ ...prev, comptes_id: option.id }))}
-          onClose={() => setShowCompteModal(false)}
-        />
-
-        <SelectionModal
-          visible={showCategorieModal}
-          title="Sélectionner une catégorie"
-          options={categoriesList}
-          onSelect={(option) => setForm(prev => ({ ...prev, depenses_cat_id: option.id }))}
-          onClose={() => setShowCategorieModal(false)}
-        />
-
         <ModeReglementModal
           visible={showModeReglementModal}
           onSelect={(mode) => setForm(prev => ({ ...prev, mode_reglement: mode.name }))}
           onClose={() => setShowModeReglementModal(false)}
-        />
-
-        <SelectionModal
-          visible={showFilterCompteModal}
-          title="Filtrer par compte"
-          options={comptesList}
-          onSelect={(option) => setFilterForm(prev => ({ ...prev, comptes_id: option.id }))}
-          onClose={() => setShowFilterCompteModal(false)}
-        />
-
-        <SelectionModal
-          visible={showFilterCategorieModal}
-          title="Filtrer par catégorie"
-          options={categoriesList}
-          onSelect={(option) => setFilterForm(prev => ({ ...prev, depenses_cat_id: option.id }))}
-          onClose={() => setShowFilterCategorieModal(false)}
         />
 
         <ModeReglementModal
@@ -755,27 +682,53 @@ const Depenses = () => {
                   {editMode === 'add' ? 'Nouvelle dépense' : 'Modifier la dépense'}
                 </Text>
 
-                <TouchableOpacity
-                  style={[styles.sheetInput, styles.selectButton]}
-                  onPress={() => setShowCompteModal(true)}
-                >
-                  <Text style={!form.comptes_id ? styles.selectPlaceholder : styles.selectText}>
-                    {form.comptes_id
-                      ? comptesList.find((c) => c.id === form.comptes_id)?.name
-                      : 'Sélectionner un compte'}
-                  </Text>
-                </TouchableOpacity>
+                <Dropdown
+                  style={[styles.sheetInput, styles.dropdown]}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={comptesList}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Compte *"
+                  searchPlaceholder="Rechercher…"
+                  value={form.comptes_id || null}
+                  onChange={(item) =>
+                    setForm((p) => ({ ...p, comptes_id: item.id }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
 
-                <TouchableOpacity
-                  style={[styles.sheetInput, styles.selectButton]}
-                  onPress={() => setShowCategorieModal(true)}
-                >
-                  <Text style={!form.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
-                    {form.depenses_cat_id
-                      ? categoriesList.find((c) => c.id === form.depenses_cat_id)?.name
-                      : 'Sélectionner une catégorie'}
-                  </Text>
-                </TouchableOpacity>
+                <Dropdown
+                  style={[styles.sheetInput, styles.dropdown]}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={categoriesList}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Catégorie *"
+                  searchPlaceholder="Rechercher…"
+                  value={form.depenses_cat_id || null}
+                  onChange={(item) =>
+                    setForm((p) => ({ ...p, depenses_cat_id: item.id }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
 
                 <TouchableOpacity
                   style={[styles.sheetInput, styles.selectButton]}
@@ -854,27 +807,53 @@ const Depenses = () => {
               <View style={styles.sheetContent}>
                 <Text style={styles.sheetTitle}>Filtrer les dépenses</Text>
 
-                <TouchableOpacity
-                  style={[styles.sheetInput, styles.selectButton]}
-                  onPress={() => setShowFilterCompteModal(true)}
-                >
-                  <Text style={!filterForm.comptes_id ? styles.selectPlaceholder : styles.selectText}>
-                    {filterForm.comptes_id
-                      ? comptesList.find((c) => c.id === filterForm.comptes_id)?.name
-                      : 'Tous les comptes'}
-                  </Text>
-                </TouchableOpacity>
+                <Dropdown
+                  style={[styles.sheetInput, styles.dropdown]}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={comptesList}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Tous les comptes"
+                  searchPlaceholder="Rechercher…"
+                  value={filterForm.comptes_id || null}
+                  onChange={(item) =>
+                    setFilterForm((p) => ({ ...p, comptes_id: item.id }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
 
-                <TouchableOpacity
-                  style={[styles.sheetInput, styles.selectButton]}
-                  onPress={() => setShowFilterCategorieModal(true)}
-                >
-                  <Text style={!filterForm.depenses_cat_id ? styles.selectPlaceholder : styles.selectText}>
-                    {filterForm.depenses_cat_id
-                      ? categoriesList.find((c) => c.id === filterForm.depenses_cat_id)?.name
-                      : 'Toutes les catégories'}
-                  </Text>
-                </TouchableOpacity>
+                <Dropdown
+                  style={[styles.sheetInput, styles.dropdown]}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={categoriesList}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="id"
+                  placeholder="Toutes les catégories"
+                  searchPlaceholder="Rechercher…"
+                  value={filterForm.depenses_cat_id || null}
+                  onChange={(item) =>
+                    setFilterForm((p) => ({ ...p, depenses_cat_id: item.id }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
 
                 <TouchableOpacity
                   style={[styles.sheetInput, styles.selectButton]}
@@ -1159,6 +1138,34 @@ const styles = StyleSheet.create({
   },
   selectText: { color: COLORS.text, fontSize: 15, fontWeight: '500' },
   selectPlaceholder: { color: COLORS.muted, fontSize: 15 },
+  dropdown: {
+    minHeight: 48,
+    height: 48,
+    justifyContent: 'center',
+    paddingVertical: 0,
+  },
+  dropdownPlaceholder: {
+    color: COLORS.muted,
+    fontSize: 15,
+  },
+  dropdownSelected: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  dropdownSearchInput: {
+    height: 40,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  dropdownContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  dropdownItemText: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   sheetActions: {
     flexDirection: 'row',

@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
-import { Modalize } from 'react-native-modalize'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import Modal from 'react-native-modal'
 import Toast from 'react-native-toast-message'
 import { Plus, Search, Trash2, User, Users, Calendar, FileText, Eye, Download } from 'lucide-react-native'
@@ -25,6 +25,7 @@ import { AuthContext } from '../context/AuthContext'
 import api from '../api/Axios'
 import Pdf from 'react-native-pdf'
 import COLORS from '../constants/couleurs'
+
 
 
 export default function ProformaDevisScreen() {
@@ -49,6 +50,21 @@ export default function ProformaDevisScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false)
 
   const createSheetRef = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ['50%'], [])
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
+
   const total = useMemo(
     () =>
       items.reduce(
@@ -339,123 +355,140 @@ export default function ProformaDevisScreen() {
 
         <TouchableOpacity
           style={styles.floatingBtn}
-          onPress={() => createSheetRef.current?.open()}
+          onPress={() => createSheetRef.current?.expand()}
         >
           <Plus size={22} color="#000000" />
         </TouchableOpacity>
 
-        <Modalize ref={createSheetRef} adjustToContentHeight>
-          <View style={styles.sheetContent}>
-            <Text style={styles.sheetTitle}>Créer un Proforma</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nom du client"
-              placeholderTextColor={COLORS.muted}
-              value={clientName}
-              onChangeText={setClientName}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor={COLORS.muted}
-              value={email}
-              onChangeText={setEmail}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Téléphone"
-              placeholderTextColor={COLORS.muted}
-              value={phone}
-              onChangeText={setPhone}
-            />
-            <TouchableOpacity
-              style={styles.input}
-              onPress={() => setShowDatePicker(true)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.dateInputRow}>
-                <Text style={[styles.inputText, !date && styles.inputPlaceholder]}>
-                  {date || 'Choisir une date'}
-                </Text>
-                <Calendar size={20} color={COLORS.muted} />
-              </View>
-            </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={date ? new Date(date) : new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(event, selectedDate) => {
-                  if (Platform.OS === 'android') {
-                    setShowDatePicker(false)
-                    if (event?.type === 'set' && selectedDate) {
-                      setDate(selectedDate.toISOString().split('T')[0])
-                    }
-                  } else if (selectedDate) {
-                    setDate(selectedDate.toISOString().split('T')[0])
-                  }
-                }}
-              />
-            )}
-            {showDatePicker && Platform.OS === 'ios' && (
-              <View style={styles.datePickerActions}>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.datePickerBtn}>
-                  <Text style={styles.datePickerBtnText}>OK</Text>
+        <BottomSheet
+          ref={createSheetRef}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={[styles.sheetContent, { paddingBottom: 32 }]}>
+                <Text style={styles.sheetTitle}>Créer un Proforma</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nom du client"
+                  placeholderTextColor={COLORS.muted}
+                  value={clientName}
+                  onChangeText={setClientName}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor={COLORS.muted}
+                  value={email}
+                  onChangeText={setEmail}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Téléphone"
+                  placeholderTextColor={COLORS.muted}
+                  value={phone}
+                  onChangeText={setPhone}
+                />
+                <TouchableOpacity
+                  style={styles.input}
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.dateInputRow}>
+                    <Text style={[styles.inputText, !date && styles.inputPlaceholder]}>
+                      {date || 'Choisir une date'}
+                    </Text>
+                    <Calendar size={20} color={COLORS.muted} />
+                  </View>
                 </TouchableOpacity>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={styles.selectButton}
-              onPress={() => {
-                fetchProducts()
-                setProductVisible(true)
-              }}
-            >
-              <Text style={styles.selectText}>Ajouter des produits</Text>
-            </TouchableOpacity>
-
-            {items.length ? (
-              <View style={styles.itemsList}>
-                {items.map((item) => (
-                  <View key={item.id} style={styles.itemRow}>
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemMeta}>
-                        {item.quantity} x {item.price} FCFA
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={() => removeItem(item.id)}
-                    >
-                      <Trash2 size={18} color="#fff" />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={date ? new Date(date) : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      if (Platform.OS === 'android') {
+                        setShowDatePicker(false)
+                        if (event?.type === 'set' && selectedDate) {
+                          setDate(selectedDate.toISOString().split('T')[0])
+                        }
+                      } else if (selectedDate) {
+                        setDate(selectedDate.toISOString().split('T')[0])
+                      }
+                    }}
+                  />
+                )}
+                {showDatePicker && Platform.OS === 'ios' && (
+                  <View style={styles.datePickerActions}>
+                    <TouchableOpacity onPress={() => setShowDatePicker(false)} style={styles.datePickerBtn}>
+                      <Text style={styles.datePickerBtnText}>OK</Text>
                     </TouchableOpacity>
                   </View>
-                ))}
+                )}
+
+                <TouchableOpacity
+                  style={styles.selectButton}
+                  onPress={() => {
+                    fetchProducts()
+                    setProductVisible(true)
+                  }}
+                >
+                  <Text style={styles.selectText}>Ajouter des produits</Text>
+                </TouchableOpacity>
+
+                {items.length ? (
+                  <View style={styles.itemsList}>
+                    {items.map((item) => (
+                      <View key={item.id} style={styles.itemRow}>
+                        <View style={styles.itemInfo}>
+                          <Text style={styles.itemName}>{item.name}</Text>
+                          <Text style={styles.itemMeta}>
+                            {item.quantity} x {item.price} FCFA
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => removeItem(item.id)}
+                        >
+                          <Trash2 size={18} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalValue}>
+                    {total.toLocaleString()} FCFA
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={createProforma}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Créer</Text>
+                  )}
+                </TouchableOpacity>
               </View>
-            ) : null}
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>
-                {total.toLocaleString()} FCFA
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={createProforma}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Créer</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </Modalize>
+            }
+          />
+        </BottomSheet>
 
         <Modal
           isVisible={productVisible}

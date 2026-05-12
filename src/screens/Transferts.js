@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   StatusBar,
-  ScrollView,
   TextInput,
   RefreshControl,
   Platform,
@@ -19,59 +18,19 @@ import {
   Plus,
   ArrowRightLeft,
   Calendar,
-  X,
   Search,
   Filter,
   FileText,
   Pencil,
   Eye,
 } from "lucide-react-native"
+import { Dropdown } from "react-native-element-dropdown"
 import Header from "../componants/Header"
 import { AuthContext } from "../context/AuthContext"
 import api from "../api/Axios"
 import LoadingScreen from "../componants/LoadingScreen"
 import Toast from "react-native-toast-message"
 import COLORS from "../constants/couleurs"
-
-/* ===================== MODAL COMPTE ===================== */
-const CompteModal = ({ visible, title, options, onSelect, onClose }) => {
-  return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onClose}
-      onBackButtonPress={onClose}
-      style={styles.modalCenter}
-      animationIn="fadeIn"
-      animationOut="fadeOut"
-      backdropOpacity={0.5}
-      useNativeDriver={true}
-    >
-      <View style={styles.modalCenterContent}>
-        <View style={styles.modalCenterHeader}>
-          <Text style={styles.modalCenterTitle}>{title}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <X size={20} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={styles.modalCenterItem}
-              onPress={() => {
-                onSelect(option)
-                onClose()
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.modalCenterItemText}>{option.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
-  )
-}
 
 /* ===================== COMPONENT ===================== */
 export default function TransfertsScreen() {
@@ -88,8 +47,6 @@ export default function TransfertsScreen() {
     montant: "",
     commentaire: "",
   })
-  const [showFromModal, setShowFromModal] = useState(false)
-  const [showToModal, setShowToModal] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [filterForm, setFilterForm] = useState({
     from: "",
@@ -97,8 +54,6 @@ export default function TransfertsScreen() {
     dateDebut: "",
     dateFin: "",
   })
-  const [showFilterFromModal, setShowFilterFromModal] = useState(false)
-  const [showFilterToModal, setShowFilterToModal] = useState(false)
   const [showFilterDateDebutPicker, setShowFilterDateDebutPicker] = useState(false)
   const [showFilterDateFinPicker, setShowFilterDateFinPicker] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -121,6 +76,15 @@ export default function TransfertsScreen() {
       />
     ),
     []
+  )
+
+  const comptesDropdownData = useMemo(
+    () =>
+      comptesList.map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    [comptesList]
   )
 
   const fetchComptes = async () => {
@@ -486,39 +450,6 @@ export default function TransfertsScreen() {
         keyboardDismissMode="on-drag"
       />
 
-      {/* Modals Compte centrés */}
-      <CompteModal
-        visible={showFromModal}
-        title="Sélectionner un compte source"
-        options={comptesList}
-        onSelect={(option) => setForm(prev => ({ ...prev, from: option.name }))}
-        onClose={() => setShowFromModal(false)}
-      />
-
-      <CompteModal
-        visible={showToModal}
-        title="Sélectionner un compte destination"
-        options={comptesList}
-        onSelect={(option) => setForm(prev => ({ ...prev, to: option.name }))}
-        onClose={() => setShowToModal(false)}
-      />
-
-      <CompteModal
-        visible={showFilterFromModal}
-        title="Filtrer par compte source"
-        options={comptesList}
-        onSelect={(option) => setFilterForm(prev => ({ ...prev, from: option.name }))}
-        onClose={() => setShowFilterFromModal(false)}
-      />
-
-      <CompteModal
-        visible={showFilterToModal}
-        title="Filtrer par compte destination"
-        options={comptesList}
-        onSelect={(option) => setFilterForm(prev => ({ ...prev, to: option.name }))}
-        onClose={() => setShowFilterToModal(false)}
-      />
-
       {/* Modal Détails */}
       <Modal
         isVisible={!!viewTransfert}
@@ -641,29 +572,57 @@ export default function TransfertsScreen() {
               {editMode === "add" ? (
                 <>
                   <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Du Compte</Text>
-                    <TouchableOpacity
-                      style={styles.selectButton}
-                      onPress={() => setShowFromModal(true)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={!form.from ? styles.selectPlaceholder : styles.selectText}>
-                        {form.from || "Sélectionner un compte source"}
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={styles.formLabel}>Du compte</Text>
+                    <Dropdown
+                      style={styles.dropdown}
+                      placeholderStyle={styles.dropdownPlaceholder}
+                      selectedTextStyle={styles.dropdownSelected}
+                      inputSearchStyle={styles.dropdownSearchInput}
+                      data={comptesDropdownData}
+                      search
+                      maxHeight={280}
+                      labelField="name"
+                      valueField="name"
+                      placeholder="Compte source *"
+                      searchPlaceholder="Rechercher…"
+                      value={form.from || null}
+                      onChange={(item) =>
+                        setForm((p) => ({ ...p, from: item.name }))
+                      }
+                      containerStyle={styles.dropdownContainer}
+                      itemTextStyle={styles.dropdownItemText}
+                      flatListProps={{
+                        bounces: false,
+                        contentContainerStyle: { paddingBottom: 16 },
+                      }}
+                    />
                   </View>
 
                   <View style={styles.formGroup}>
-                    <Text style={styles.formLabel}>Au Compte</Text>
-                    <TouchableOpacity
-                      style={styles.selectButton}
-                      onPress={() => setShowToModal(true)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={!form.to ? styles.selectPlaceholder : styles.selectText}>
-                        {form.to || "Sélectionner un compte destination"}
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={styles.formLabel}>Au compte</Text>
+                    <Dropdown
+                      style={styles.dropdown}
+                      placeholderStyle={styles.dropdownPlaceholder}
+                      selectedTextStyle={styles.dropdownSelected}
+                      inputSearchStyle={styles.dropdownSearchInput}
+                      data={comptesDropdownData}
+                      search
+                      maxHeight={280}
+                      labelField="name"
+                      valueField="name"
+                      placeholder="Compte destination *"
+                      searchPlaceholder="Rechercher…"
+                      value={form.to || null}
+                      onChange={(item) =>
+                        setForm((p) => ({ ...p, to: item.name }))
+                      }
+                      containerStyle={styles.dropdownContainer}
+                      itemTextStyle={styles.dropdownItemText}
+                      flatListProps={{
+                        bounces: false,
+                        contentContainerStyle: { paddingBottom: 16 },
+                      }}
+                    />
                   </View>
 
                   <View style={styles.formGroup}>
@@ -752,29 +711,57 @@ export default function TransfertsScreen() {
               <Text style={styles.sheetTitle}>Filtrer les transferts</Text>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Du Compte</Text>
-                <TouchableOpacity
-                  style={styles.selectButton}
-                  onPress={() => setShowFilterFromModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={!filterForm.from ? styles.selectPlaceholder : styles.selectText}>
-                    {filterForm.from || "Tous les comptes sources"}
-                  </Text>
-                </TouchableOpacity>
+                <Text style={styles.formLabel}>Du compte</Text>
+                <Dropdown
+                  style={styles.dropdown}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={comptesDropdownData}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="name"
+                  placeholder="Tous les comptes sources"
+                  searchPlaceholder="Rechercher…"
+                  value={filterForm.from || null}
+                  onChange={(item) =>
+                    setFilterForm((p) => ({ ...p, from: item.name }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Au Compte</Text>
-                <TouchableOpacity
-                  style={styles.selectButton}
-                  onPress={() => setShowFilterToModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={!filterForm.to ? styles.selectPlaceholder : styles.selectText}>
-                    {filterForm.to || "Tous les comptes destinations"}
-                  </Text>
-                </TouchableOpacity>
+                <Text style={styles.formLabel}>Au compte</Text>
+                <Dropdown
+                  style={styles.dropdown}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelected}
+                  inputSearchStyle={styles.dropdownSearchInput}
+                  data={comptesDropdownData}
+                  search
+                  maxHeight={280}
+                  labelField="name"
+                  valueField="name"
+                  placeholder="Tous les comptes destinations"
+                  searchPlaceholder="Rechercher…"
+                  value={filterForm.to || null}
+                  onChange={(item) =>
+                    setFilterForm((p) => ({ ...p, to: item.name }))
+                  }
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={styles.dropdownItemText}
+                  flatListProps={{
+                    bounces: false,
+                    contentContainerStyle: { paddingBottom: 16 },
+                  }}
+                />
               </View>
 
               <View style={styles.formGroup}>
@@ -996,44 +983,6 @@ const styles = StyleSheet.create({
   },
   modalCloseText: { color: COLORS.white, fontWeight: "700" },
 
-  // Styles pour les modals centrés
-  modalCenter: {
-    margin: 0,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalCenterContent: {
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    width: "80%",
-    maxHeight: "70%",
-    padding: 16,
-  },
-  modalCenterHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  modalCenterTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  modalCenterItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  modalCenterItemText: {
-    fontSize: 16,
-    color: COLORS.text,
-  },
-
   // Bottom sheet (gorhom) — même logique que Depenses.js
   sheetContent: {
     padding: 20,
@@ -1044,16 +993,36 @@ const styles = StyleSheet.create({
   formGroup: { gap: 8 },
   formLabel: { fontSize: 14, fontWeight: "600", color: COLORS.text },
 
-  selectButton: {
+  dropdown: {
     backgroundColor: COLORS.bg,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    height: 48,
   },
-  selectText: { color: COLORS.text, fontSize: 15, fontWeight: "500" },
-  selectPlaceholder: { color: COLORS.muted, fontSize: 15 },
+  dropdownPlaceholder: {
+    color: COLORS.muted,
+    fontSize: 15,
+  },
+  dropdownSelected: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  dropdownSearchInput: {
+    height: 40,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  dropdownContainer: {
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  dropdownItemText: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
 
   dateButton: {
     backgroundColor: COLORS.bg,

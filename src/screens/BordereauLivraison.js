@@ -122,8 +122,6 @@ export default function BordereauLivraisonScreen() {
           adresse: item.adresse || item.client_adresse || "-",
           total: Number(item.total) || 0,
           url: item.url_fichier || "",
-          livreur: item.livreur_nom || "À assigner",
-          status: item.status || "en_attente",
         };
       });
 
@@ -206,23 +204,6 @@ export default function BordereauLivraisonScreen() {
     }
   };
 
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      en_attente: { label: "En attente", color: "#ffc107", bg: "#ffc10720" },
-      en_cours: { label: "En cours", color: "#17a2b8", bg: "#17a2b820" },
-      livree: { label: "Livrée", color: "#28a745", bg: "#28a74520" },
-      annulee: { label: "Annulée", color: "#dc3545", bg: "#dc354520" },
-    };
-    const config = statusConfig[status] || statusConfig.en_attente;
-    return (
-      <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
-        <Text style={[styles.statusText, { color: config.color }]}>
-          {config.label}
-        </Text>
-      </View>
-    );
-  };
-
   /* ===================== RENDER ===================== */
   if (initialLoading) {
     return <LoadingScreen />;
@@ -287,7 +268,6 @@ export default function BordereauLivraisonScreen() {
                 <View style={styles.cardTop}>
                   <View style={styles.cardTopLeft}>
                     <Text style={styles.ref}>BL #{b.reference}</Text>
-                    {getStatusBadge(b.status)}
                   </View>
                   <Text style={styles.amount}>
                     {b.total.toLocaleString()} FCFA
@@ -303,7 +283,6 @@ export default function BordereauLivraisonScreen() {
                 {b.adresse !== "-" && (
                   <Info icon={MapPin} label="Adresse" value={b.adresse} />
                 )}
-                <Info icon={Truck} label="Livreur" value={b.livreur} />
               </TouchableOpacity>
 
               <View style={styles.actions}>
@@ -387,17 +366,6 @@ export default function BordereauLivraisonScreen() {
                 ["Adresse", detailBordereau.adresse],
                 ["Date", detailBordereau.date],
                 ["Employé", detailBordereau.employe],
-                ["Livreur", detailBordereau.livreur],
-                [
-                  "Statut",
-                  detailBordereau.status === "livree"
-                    ? "Livrée"
-                    : detailBordereau.status === "en_cours"
-                      ? "En cours"
-                      : detailBordereau.status === "annulee"
-                        ? "Annulée"
-                        : "En attente",
-                ],
                 ["Total", `${detailBordereau.total.toLocaleString()} FCFA`],
               ].map(([l, v]) => (
                 <View key={l} style={styles.modalRow}>
@@ -589,13 +557,6 @@ const styles = StyleSheet.create({
   ref: { fontWeight: "700", color: COLORS.primary, fontSize: 14 },
   amount: { fontWeight: "700", color: COLORS.success, fontSize: 16 },
 
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  statusText: { fontSize: 11, fontWeight: "600" },
-
   infoRow: { flexDirection: "row", gap: 10, marginBottom: 6, alignItems: "center" },
   infoText: { color: COLORS.text, fontSize: 13, flex: 1 },
   infoValue: { fontWeight: "600" },
@@ -651,13 +612,12 @@ const styles = StyleSheet.create({
   emptySubtext: { color: COLORS.muted, fontSize: 13, marginTop: 8 },
 
   detailModalWrap: {
-    margin: 0,
-    justifyContent: "flex-end",
+   
+    justifyContent: "center",
   },
   modalCardOuter: {
     backgroundColor: COLORS.card,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 20,

@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { Modalize } from 'react-native-modalize'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import Toast from 'react-native-toast-message'
 import {
   Plus,
@@ -61,6 +61,20 @@ const FournisseursScreen = () => {
   })
 
   const sheetRef = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ['50%'], [])
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   useEffect(() => {
     refreshFournisseurs(1, false, false)
@@ -174,7 +188,7 @@ const FournisseursScreen = () => {
       adresse: '',
       status: '1',
     })
-    sheetRef.current?.open()
+    sheetRef.current?.expand()
   }
 
   const openEdit = (item) => {
@@ -374,41 +388,58 @@ const FournisseursScreen = () => {
           <Plus size={24} color="#000000" />
         </TouchableOpacity>
 
-        <Modalize ref={sheetRef} adjustToContentHeight>
-          <View style={styles.sheetContent}>
-            <Text style={styles.sheetTitle}>
-              {editMode === 'add' ? 'Nouveau fournisseur' : 'Modifier le fournisseur'}
-            </Text>
-            {[
-              ['nom_entreprise', 'Nom entreprise'],
-              ['telephone', 'Téléphone'],
-              ['email', 'Email'],
-              ['adresse', 'Adresse'],
-            ].map(([field, label]) => (
-              <TextInput
-                key={field}
-                style={styles.sheetInput}
-                placeholder={label}
-                value={form[field]?.toString() || ''}
-                onChangeText={(value) =>
-                  setForm((p) => ({ ...p, [field]: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-              />
-            ))}
-            <View style={styles.sheetActions}>
-              <TouchableOpacity
-                style={[styles.sheetButton, styles.sheetButtonGhost]}
-                onPress={() => sheetRef.current?.close()}
-              >
-                <Text style={styles.sheetButtonGhostText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sheetButton} onPress={saveFournisseur}>
-                <Text style={styles.sheetButtonText}>Enregistrer</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modalize>
+        <BottomSheet
+          ref={sheetRef}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={[styles.sheetContent, { paddingBottom: 32 }]}>
+                <Text style={styles.sheetTitle}>
+                  {editMode === 'add' ? 'Nouveau fournisseur' : 'Modifier le fournisseur'}
+                </Text>
+                {[
+                  ['nom_entreprise', 'Nom entreprise'],
+                  ['telephone', 'Téléphone'],
+                  ['email', 'Email'],
+                  ['adresse', 'Adresse'],
+                ].map(([field, label]) => (
+                  <TextInput
+                    key={field}
+                    style={styles.sheetInput}
+                    placeholder={label}
+                    value={form[field]?.toString() || ''}
+                    onChangeText={(value) =>
+                      setForm((p) => ({ ...p, [field]: value }))
+                    }
+                    placeholderTextColor={COLORS.muted}
+                  />
+                ))}
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={() => sheetRef.current?.close()}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={saveFournisseur}>
+                    <Text style={styles.sheetButtonText}>Enregistrer</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            }
+          />
+        </BottomSheet>
 
         <Modal isVisible={!!viewFournisseur} onBackdropPress={() => setViewFournisseur(null)}>
           <View style={styles.modalCard}>

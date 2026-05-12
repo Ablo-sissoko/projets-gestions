@@ -11,10 +11,9 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from "react-native"
 import Modal from "react-native-modal"
-import { Modalize } from "react-native-modalize"
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from "@gorhom/bottom-sheet"
 import {
   Plus,
   Filter,
@@ -35,6 +34,7 @@ import Toast from "react-native-toast-message"
 import COLORS from "../constants/couleurs"
 
 /* ===================== COMPONENT ===================== */
+
 export default function ComptesScreen() {
   const { user } = useContext(AuthContext)
   const [comptes, setComptes] = useState([])
@@ -49,6 +49,22 @@ export default function ComptesScreen() {
 
   const sheetRef = useRef(null)
   const filterRef = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ["45%"], [])
+  const filterSnapPoints = useMemo(() => ["45%"], [])
+
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   const [form, setForm] = useState({
     nom: "",
@@ -82,7 +98,7 @@ export default function ComptesScreen() {
       commentaire: "",
     })
     requestAnimationFrame(() => {
-      sheetRef.current?.open()
+      sheetRef.current?.expand()
     })
   }
 
@@ -94,7 +110,7 @@ export default function ComptesScreen() {
       statut: c.statut,
     })
     requestAnimationFrame(() => {
-      sheetRef.current?.open()
+      sheetRef.current?.expand()
     })
   }
 
@@ -327,7 +343,7 @@ export default function ComptesScreen() {
         </View>
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={() => filterRef.current?.open()}
+          onPress={() => filterRef.current?.expand()}
         >
           <Filter size={18} color={COLORS.primary} />
         </TouchableOpacity>
@@ -357,11 +373,11 @@ export default function ComptesScreen() {
 
   return (
     <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-  >
-    <View style={styles.wrapper}>
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      <View style={styles.wrapper}>
       <StatusBar backgroundColor={COLORS.primary} barStyle="light-content" />
       <Header agentName="Agent connecté" />
 
@@ -430,179 +446,177 @@ export default function ComptesScreen() {
       </Modal>
 
       {/* ADD / EDIT */}
-      <Modalize
+      <BottomSheet
         ref={sheetRef}
-        adjustToContentHeight
-        modalStyle={styles.modalize}
-        handleStyle={styles.handle}
-        overlayStyle={styles.overlay}
-        openAnimationConfig={{ timing: { duration: 380 } }}
-        closeAnimationConfig={{ timing: { duration: 320 } }}
-        withHandle
-        panGestureEnabled
-        closeOnOverlayTap
+        index={-1}
+        snapPoints={sheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={renderSheetBackdrop}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-
-        <ScrollView
-          style={styles.sheetScroll}
-          contentContainerStyle={styles.sheetContent}
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.sheetTitle}>
-            {editMode === "add"
-              ? "Nouveau compte"
-              : "Modifier le compte"}
-          </Text>
+          renderItem={() => null}
+          ListHeaderComponent={
+            <View style={styles.sheetContent}>
+              <Text style={styles.sheetTitle}>
+                {editMode === "add"
+                  ? "Nouveau compte"
+                  : "Modifier le compte"}
+              </Text>
 
-          {[
-            ["nom", "Nom du compte"],
-            ["numero", "Numéro"],
-            ["solde", "Solde initial"],
-            ["commentaire", "Commentaire"],
-          ].map(([field, label]) => (
-            <TextInput
-              key={field}
-              placeholder={label}
-              style={styles.sheetInput}
-              value={form[field]?.toString()}
-              onChangeText={(v) =>
-                setForm((p) => ({ ...p, [field]: v }))
-              }
-              keyboardType={field === "solde" ? "numeric" : "default"}
-              placeholderTextColor={COLORS.muted}
-            />
-          ))}
+              {[
+                ["nom", "Nom du compte"],
+                ["numero", "Numéro"],
+                ["solde", "Solde initial"],
+                ["commentaire", "Commentaire"],
+              ].map(([field, label]) => (
+                <TextInput
+                  key={field}
+                  placeholder={label}
+                  style={styles.sheetInput}
+                  value={form[field]?.toString()}
+                  onChangeText={(v) =>
+                    setForm((p) => ({ ...p, [field]: v }))
+                  }
+                  keyboardType={field === "solde" ? "numeric" : "default"}
+                  placeholderTextColor={COLORS.muted}
+                />
+              ))}
 
-          {editMode === "edit" && (
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusLabel}>Statut du compte</Text>
-              <View style={styles.statusButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    form.statut === "Actif" && styles.statusButtonActive,
-                  ]}
-                  onPress={() => setForm((p) => ({ ...p, statut: "Actif" }))}
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      form.statut === "Actif" && styles.statusButtonTextActive,
-                    ]}
-                  >
-                    Actif
-                  </Text>
-                </TouchableOpacity>
+              {editMode === "edit" && (
+                <View style={styles.statusContainer}>
+                  <Text style={styles.statusLabel}>Statut du compte</Text>
+                  <View style={styles.statusButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusButton,
+                        form.statut === "Actif" && styles.statusButtonActive,
+                      ]}
+                      onPress={() => setForm((p) => ({ ...p, statut: "Actif" }))}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          form.statut === "Actif" && styles.statusButtonTextActive,
+                        ]}
+                      >
+                        Actif
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.statusButton,
-                    form.statut === "Désactivé" && styles.statusButtonInactive,
-                  ]}
-                  onPress={() => setForm((p) => ({ ...p, statut: "Désactivé" }))}
-                >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      form.statut === "Désactivé" && styles.statusButtonTextInactive,
-                    ]}
-                  >
-                    Désactivé
-                  </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.statusButton,
+                        form.statut === "Désactivé" && styles.statusButtonInactive,
+                      ]}
+                      onPress={() => setForm((p) => ({ ...p, statut: "Désactivé" }))}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          form.statut === "Désactivé" && styles.statusButtonTextInactive,
+                        ]}
+                      >
+                        Désactivé
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.sheetButton}
+                onPress={saveCompte}
+              >
+                <Text style={styles.sheetButtonText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      </BottomSheet>
+
+      {/* FILTER */}
+      <BottomSheet
+        ref={filterRef}
+        index={-1}
+        snapPoints={filterSnapPoints}
+        enablePanDownToClose
+        backdropComponent={renderSheetBackdrop}
+      >
+        <BottomSheetFlatList
+          data={[]}
+          keyExtractor={(_, index) => String(index)}
+          keyboardShouldPersistTaps="handled"
+          renderItem={() => null}
+          ListHeaderComponent={
+            <View style={styles.filterSheetContent}>
+              <View style={styles.filterHeader}>
+                <Filter size={20} color={COLORS.primary} />
+                <Text style={styles.filterHeaderTitle}>Filtrer les comptes</Text>
+                <TouchableOpacity onPress={() => filterRef.current?.close()}>
+                  <Text style={styles.filterCloseText}>Fermer</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
 
-          <TouchableOpacity
-            style={styles.sheetButton}
-            onPress={saveCompte}
-          >
-            <Text style={styles.sheetButtonText}>Enregistrer</Text>
-          </TouchableOpacity>
-        </ScrollView>
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Statut</Text>
+                <View style={styles.filterChips}>
+                  {["Actif", "Désactivé"].map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.filterChip,
+                        filterStatut === s && styles.filterChipActive,
+                      ]}
+                      onPress={() => {
+                        setFilterStatut(s)
+                        filterRef.current?.close()
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          filterStatut === s && styles.filterChipTextActive,
+                        ]}
+                      >
+                        {s}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-      </Modalize>
+              <View style={styles.filterDivider} />
 
-      {/* FILTER MODAL */}
-      <Modalize
-        ref={filterRef}
-        adjustToContentHeight
-        modalStyle={styles.modalize}
-        handleStyle={styles.handle}
-        overlayStyle={styles.overlay}
-        openAnimationConfig={{ timing: { duration: 380 } }}
-        closeAnimationConfig={{ timing: { duration: 320 } }}
-        withHandle
-        panGestureEnabled
-        closeOnOverlayTap
-      >
-        <View style={styles.filterSheetContent}>
-          {/* Header avec icône */}
-          <View style={styles.filterHeader}>
-            <Filter size={20} color={COLORS.primary} />
-            <Text style={styles.filterHeaderTitle}>Filtrer les comptes</Text>
-            <TouchableOpacity onPress={() => filterRef.current?.close()}>
-              <Text style={styles.filterCloseText}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Section Statut */}
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Statut</Text>
-            <View style={styles.filterChips}>
-              {["Actif", "Désactivé"].map((s) => (
+              <View style={styles.filterActions}>
                 <TouchableOpacity
-                  key={s}
-                  style={[
-                    styles.filterChip,
-                    filterStatut === s && styles.filterChipActive,
-                  ]}
+                  style={styles.filterResetBtn}
                   onPress={() => {
-                    setFilterStatut(s)
+                    resetFilters()
                     filterRef.current?.close()
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      filterStatut === s && styles.filterChipTextActive,
-                    ]}
-                  >
-                    {s}
-                  </Text>
+                  <RotateCcw size={16} color={COLORS.muted} />
+                  <Text style={styles.filterResetText}>Réinitialiser</Text>
                 </TouchableOpacity>
-              ))}
+
+                <TouchableOpacity
+                  style={styles.filterApplyBtn}
+                  onPress={() => filterRef.current?.close()}
+                >
+                  <Text style={styles.filterApplyText}>Appliquer</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-
-          {/* Séparateur */}
-          <View style={styles.filterDivider} />
-
-          {/* Actions */}
-          <View style={styles.filterActions}>
-            <TouchableOpacity
-              style={styles.filterResetBtn}
-              onPress={() => {
-                resetFilters()
-                filterRef.current?.close()
-              }}
-            >
-              <RotateCcw size={16} color={COLORS.muted} />
-              <Text style={styles.filterResetText}>Réinitialiser</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.filterApplyBtn}
-              onPress={() => filterRef.current?.close()}
-            >
-              <Text style={styles.filterApplyText}>Appliquer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modalize>
-    </View>
+          }
+        />
+      </BottomSheet>
+      </View>
     </KeyboardAvoidingView>
   )
 }
@@ -756,24 +770,17 @@ const styles = StyleSheet.create({
   modalLabel: { fontSize: 12, color: COLORS.muted },
   modalValue: { fontWeight: "600" },
 
-  modalize: {
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    backgroundColor: COLORS.card,
+  sheetContent: {
+    padding: 20,
+    gap: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
   },
-  handle: {
-    width: 60,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.border,
-    marginTop: 10,
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+    color: COLORS.text,
   },
-  overlay: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  sheetScroll: { flexGrow: 0 },
-  sheetContent: { padding: 20, paddingBottom: 32, gap: 12 },
-  sheetTitle: { fontSize: 16, fontWeight: "700" },
   sheetInput: {
     backgroundColor: COLORS.card,
     borderWidth: 1,

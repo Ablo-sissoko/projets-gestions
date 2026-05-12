@@ -13,7 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Modalize } from 'react-native-modalize';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import Modal from 'react-native-modal';
 import Toast from 'react-native-toast-message';
 import { Plus, Search, User, Users, Phone, Calendar, FileText, Eye, Download } from 'lucide-react-native';
@@ -48,6 +48,20 @@ const Commandes = () => {
   const [selectedCommande, setSelectedCommande] = useState(null);
 
   const clientModal = useRef(null);
+
+  const sheetSnapPoints = useMemo(() => ['50%'], []);
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
 
   const totalGeneral = useMemo(
     () => produits.reduce((sum, item) => sum + Number(item.qte || 0) * Number(item.prix || 0), 0),
@@ -323,7 +337,7 @@ const Commandes = () => {
     <View>
                   <Text style={styles.title}>Bon de Commandes</Text>
                 </View>
-                <TouchableOpacity style={styles.addButton} onPress={() => clientModal.current?.open()}>
+                <TouchableOpacity style={styles.addButton} onPress={() => clientModal.current?.expand()}>
                   <Plus size={18} color="#000000" />
                   <Text style={styles.addButtonText}>Créer</Text>
                 </TouchableOpacity>
@@ -368,65 +382,82 @@ const Commandes = () => {
           onEndReachedThreshold={0.5}
         />
 
-        {/* Modal Client */}
-        <Modalize ref={clientModal} handleStyle={{ backgroundColor: COLORS.primary }} adjustToContentHeight>
-          <View style={{ padding: 16 }}>
-            <Text style={styles.modalTitle}>Informations Client</Text>
-            <TextInput placeholder="Nom" placeholderTextColor="#999" style={styles.modalInput} value={clientNom} onChangeText={setClientNom} />
-            <TextInput placeholder="Téléphone" placeholderTextColor="#999" style={styles.modalInput} value={clientPhone} onChangeText={setClientPhone} keyboardType="phone-pad" />
-            <TextInput placeholder="Email" placeholderTextColor="#999" style={styles.modalInput} value={clientEmail} onChangeText={setClientEmail} keyboardType="email-address" autoCapitalize="none" />
-            <TextInput placeholder="Adresse" placeholderTextColor="#999" style={styles.modalInput} value={clientAdresse} onChangeText={setClientAdresse} />
-            <View style={[styles.sectionHeader, { marginBottom: 12 }]}>
-              <Text style={styles.sectionTitle}>Produits</Text>
-              <TouchableOpacity
-                style={styles.addProductButton}
-                onPress={() => {
-                  fetchProduits();
-                  setProduitVisible(true);
-                }}
-              >
-                <Text style={styles.addProductText}>Ajouter produit</Text>
-              </TouchableOpacity>
-            </View>
-            {!!produits.length && (
-              <>
-                <Text style={{ fontWeight: '700', marginTop: 12 }}>Produits sélectionnés</Text>
-                {produits.map((item) => (
-                  <View key={item.id} style={styles.card}>
-                    <View>
-                      <Text style={styles.productName}>{item.nom}</Text>
-                      <Text style={styles.details}>
-                        {item.qte} x {item.prix} FCFA
-                      </Text>
-                    </View>
-                    <View style={styles.qtyRow}>
-                      <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => updateProduitQty(item.id, -1)}
-                      >
-                        <Text style={styles.qtyBtnText}>-</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.qtyValue}>{item.qte}</Text>
-                      <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => updateProduitQty(item.id, 1)}
-                      >
-                        <Text style={styles.qtyBtnText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </>
-            )}
-            <TouchableOpacity
-              style={[styles.saveBtn, { marginTop: 16 }]}
-              onPress={createCommande}
-              disabled={saving}
-            >
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Enregistrer</Text>}
-            </TouchableOpacity>
-          </View>
-        </Modalize>
+        {/* Bottom sheet création commande */}
+        <BottomSheet
+          ref={clientModal}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={{ padding: 16, paddingBottom: 32 }}>
+                <Text style={styles.modalTitle}>Informations Client</Text>
+                <TextInput placeholder="Nom" placeholderTextColor="#999" style={styles.modalInput} value={clientNom} onChangeText={setClientNom} />
+                <TextInput placeholder="Téléphone" placeholderTextColor="#999" style={styles.modalInput} value={clientPhone} onChangeText={setClientPhone} keyboardType="phone-pad" />
+                <TextInput placeholder="Email" placeholderTextColor="#999" style={styles.modalInput} value={clientEmail} onChangeText={setClientEmail} keyboardType="email-address" autoCapitalize="none" />
+                <TextInput placeholder="Adresse" placeholderTextColor="#999" style={styles.modalInput} value={clientAdresse} onChangeText={setClientAdresse} />
+                <View style={[styles.sectionHeader, { marginBottom: 12 }]}>
+                  <Text style={styles.sectionTitle}>Produits</Text>
+                  <TouchableOpacity
+                    style={styles.addProductButton}
+                    onPress={() => {
+                      fetchProduits();
+                      setProduitVisible(true);
+                    }}
+                  >
+                    <Text style={styles.addProductText}>Ajouter produit</Text>
+                  </TouchableOpacity>
+                </View>
+                {!!produits.length && (
+                  <>
+                    <Text style={{ fontWeight: '700', marginTop: 12 }}>Produits sélectionnés</Text>
+                    {produits.map((item) => (
+                      <View key={item.id} style={styles.card}>
+                        <View>
+                          <Text style={styles.productName}>{item.nom}</Text>
+                          <Text style={styles.details}>
+                            {item.qte} x {item.prix} FCFA
+                          </Text>
+                        </View>
+                        <View style={styles.qtyRow}>
+                          <TouchableOpacity
+                            style={styles.qtyBtn}
+                            onPress={() => updateProduitQty(item.id, -1)}
+                          >
+                            <Text style={styles.qtyBtnText}>-</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.qtyValue}>{item.qte}</Text>
+                          <TouchableOpacity
+                            style={styles.qtyBtn}
+                            onPress={() => updateProduitQty(item.id, 1)}
+                          >
+                            <Text style={styles.qtyBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
+                <TouchableOpacity
+                  style={[styles.saveBtn, { marginTop: 16 }]}
+                  onPress={createCommande}
+                  disabled={saving}
+                >
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Enregistrer</Text>}
+                </TouchableOpacity>
+              </View>
+            }
+          />
+        </BottomSheet>
 
         {/* Modal Produit */}
         <Modal

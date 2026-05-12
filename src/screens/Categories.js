@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native'
 import Modal from 'react-native-modal'
-import { Modalize } from 'react-native-modalize'
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import Toast from 'react-native-toast-message'
 import { Search, Plus, Pencil, Eye, Tag, FileText } from 'lucide-react-native'
 import Header from '../componants/Header'
@@ -42,6 +42,20 @@ const Categories = () => {
   })
 
   const sheetRef = useRef(null)
+
+  const sheetSnapPoints = useMemo(() => ['30%'], [])
+  const renderSheetBackdrop = useCallback(
+    (props) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        opacity={0.35}
+        pressBehavior="close"
+      />
+    ),
+    []
+  )
 
   useEffect(() => {
     refreshAll(true)
@@ -124,7 +138,7 @@ const Categories = () => {
       description: '',
       status: '1',
     })
-    sheetRef.current?.open()
+    sheetRef.current?.expand()
   }
 
   const openEdit = (item) => {
@@ -135,7 +149,7 @@ const Categories = () => {
       description: item.description || '',
       status: item.status === 0 ? '0' : '1',
     })
-    sheetRef.current?.open()
+    sheetRef.current?.expand()
   }
 
   const saveExpenseCategory = async () => {
@@ -469,45 +483,62 @@ const Categories = () => {
           </View>
         </Modal>
 
-        <Modalize ref={sheetRef} adjustToContentHeight>
-          <View style={styles.sheetContent}>
-            <Text style={styles.sheetTitle}>
-              {editMode === 'add' ? 'Nouvelle catégorie' : 'Modifier la catégorie'}
-            </Text>
-            <TextInput
-              style={styles.sheetInput}
-              placeholder="Nom"
-              value={form.name}
-              onChangeText={(value) => setForm((prev) => ({ ...prev, name: value }))}
-              placeholderTextColor={COLORS.muted}
-            />
-            {activeTab === 'depenses' ? (
-              <TextInput
-                style={[styles.sheetInput, styles.textArea]}
-                placeholder="Description"
-                value={form.description}
-                onChangeText={(value) =>
-                  setForm((prev) => ({ ...prev, description: value }))
-                }
-                placeholderTextColor={COLORS.muted}
-                multiline
-              />
-            ) : null}
-            <View style={styles.sheetActions}>
-              <TouchableOpacity
-                style={[styles.sheetButton, styles.sheetButtonGhost]}
-                onPress={() => sheetRef.current?.close()}
-              >
-                <Text style={styles.sheetButtonGhostText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sheetButton} onPress={saveCategory}>
-                <Text style={styles.sheetButtonText}>
-                  {editMode === 'add' ? 'Créer' : 'Enregistrer'}
+        <BottomSheet
+          ref={sheetRef}
+          index={-1}
+          snapPoints={sheetSnapPoints}
+          enablePanDownToClose
+          backdropComponent={renderSheetBackdrop}
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
+        >
+          <BottomSheetFlatList
+            data={[]}
+            keyExtractor={(_, index) => String(index)}
+            keyboardShouldPersistTaps="handled"
+            renderItem={() => null}
+            ListHeaderComponent={
+              <View style={[styles.sheetContent, { paddingBottom: 32 }]}>
+                <Text style={styles.sheetTitle}>
+                  {editMode === 'add' ? 'Nouvelle catégorie' : 'Modifier la catégorie'}
                 </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modalize>
+                <TextInput
+                  style={styles.sheetInput}
+                  placeholder="Nom"
+                  value={form.name}
+                  onChangeText={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                  placeholderTextColor={COLORS.muted}
+                />
+                {activeTab === 'depenses' ? (
+                  <TextInput
+                    style={[styles.sheetInput, styles.textArea]}
+                    placeholder="Description"
+                    value={form.description}
+                    onChangeText={(value) =>
+                      setForm((prev) => ({ ...prev, description: value }))
+                    }
+                    placeholderTextColor={COLORS.muted}
+                    multiline
+                  />
+                ) : null}
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity
+                    style={[styles.sheetButton, styles.sheetButtonGhost]}
+                    onPress={() => sheetRef.current?.close()}
+                  >
+                    <Text style={styles.sheetButtonGhostText}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.sheetButton} onPress={saveCategory}>
+                    <Text style={styles.sheetButtonText}>
+                      {editMode === 'add' ? 'Créer' : 'Enregistrer'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            }
+          />
+        </BottomSheet>
     </View>
     </KeyboardAvoidingView>
   )

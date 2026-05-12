@@ -272,8 +272,9 @@ export default function SignatureEntreprise() {
 
     setRemoving(true);
     try {
-      const response = await api.delete(
-        `/sellprox/entreprise/signature/delete/${id}`
+      const response = await api.post(
+        `/sellprox/entreprise/signature/delete/${id}`,
+        {}
       );
       const data = response.data;
       const failed =
@@ -343,6 +344,21 @@ export default function SignatureEntreprise() {
           Photographiez ou importez une image de signature pour vos documents et
           factures.
         </Text>
+
+        <View style={styles.tipBox}>
+          <Text style={styles.tipTitle}>Conseil pour la meilleure photo</Text>
+          <Text style={styles.tipLine}>
+            • Signez sur une feuille très blanche (stylo noir ou bleu foncé).
+          </Text>
+          <Text style={styles.tipLine}>
+            • Photographiez la signature sur ce fond blanc, avec une lumière
+            uniforme et peu d’ombres.
+          </Text>
+          <Text style={styles.tipLine}>
+            • Importez l’image via « Galerie », ou capturez-la directement avec
+            « Prendre une photo » ou en appuyant sur la zone ci-dessous.
+          </Text>
+        </View>
 
         <TouchableOpacity
           style={styles.signatureCard}
@@ -455,8 +471,28 @@ const styles = StyleSheet.create({
   intro: {
     fontSize: 14,
     color: COLORS.muted,
-    marginBottom: 20,
+    marginBottom: 16,
     lineHeight: 20,
+  },
+  tipBox: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    marginBottom: 20,
+  },
+  tipTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  tipLine: {
+    fontSize: 13,
+    color: COLORS.muted,
+    lineHeight: 20,
+    marginBottom: 8,
   },
   sourceRow: {
     flexDirection: "row",
